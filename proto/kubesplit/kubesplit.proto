@@ -1,0 +1,101 @@
+// Wire protocol between split-learning clients and the server.
+//
+// The file lives at proto/kubesplit/ so that protoc (run with -I proto) emits
+// kubesplit/kubesplit_pb2.py with package-relative imports.
+syntax = "proto3";
+
+package kubesplit.v1;
+
+// A tensor as raw little-endian bytes. Nothing on the wire is pickled.
+message Tensor {
+  string dtype = 1;  // "float32", "int64", ...
+  repeated int64 shape = 2;
+  bytes data = 3;
+}
+
+message NamedTensor {
+  string name = 1;
+  Tensor tensor = 2;
+}
+
+// Model weights, in state_dict order.
+message StateDict {
+  repeated NamedTensor entries = 1;
+}
+
+// Everything every client must agree on. The server owns it; clients get it on Join.
+message RunConfig {
+  string mode = 1;       // "vanilla" | "decoupled"
+  int32 num_clients = 2;
+  string partition = 3;  // "iid" | "dirichlet"
+  double alpha = 4;
+  int64 seed = 5;
+  int32 batch_size = 6;
+  double lr = 7;
+  string dataset = 8;    // "cifar10" | "fake"
+  int32 max_batches = 9; // per client per round; 0 = whole shard
+}
+
+message JoinRequest {
+  string client_id = 1;
+  int32 shard = 2;
+}
+
+message JoinReply {
+  RunConfig config = 1;
+}
+
+message RoundRequest {
+  string client_id = 1;
+  int32 last_round = 2;  // last round this client trained; 0 if none
+}
+
+message RoundInfo {
+  int32 round = 1;       // 0 = no new round yet, ask again
+  bool done = 2;         // training finished; client should exit
+  StateDict global_state = 3;
+}
+
+message Activations {
+  string client_id = 1;
+  int32 round = 2;
+  Tensor activations = 3;
+  Tensor labels = 4;
+}
+
+message Gradients {
+  Tensor grad = 1;       // d loss / d activations
+  float loss = 2;
+  int32 correct = 3;
+}
+
+message StreamSummary {
+  int32 batches = 1;
+  int64 samples = 2;
+  double loss_sum = 3;   // sum of per-sample loss
+  int64 correct = 4;
+}
+
+message Update {
+  string client_id = 1;
+  int32 round = 2;
+  int64 num_samples = 3; // FedAvg weight
+  StateDict state = 4;
+}
+
+message UpdateAck {
+  bool accepted = 1;     // false if the round already closed without this client
+  int32 current_round = 2;
+}
+
+service SplitLearning {
+  rpc Join(JoinRequest) returns (JoinReply);
+  // Long-poll: returns once a round newer than last_round opens, or after a
+  // server-side wait limit with round = 0.
+  rpc WaitRound(RoundRequest) returns (RoundInfo);
+  // Vanilla: one round trip per batch; the client blocks on the gradient.
+  rpc Step(Activations) returns (Gradients);
+  // Decoupled: activations flow one way; the client never waits per batch.
+  rpc StreamActivations(stream Activations) returns (StreamSummary);
+  rpc SubmitUpdate(Update) returns (UpdateAck);
+}

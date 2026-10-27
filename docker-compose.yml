@@ -1,0 +1,76 @@
+# Local end-to-end run: 1 server + 4 clients from the same image Kubernetes uses.
+#
+#   MODE=vanilla   docker compose up --build --abort-on-container-failure
+#   MODE=decoupled docker compose up --build --abort-on-container-failure
+#
+# Knobs (environment): MODE, ROUNDS, DATASET (cifar10|fake), MAX_BATCHES,
+# QUORUM_PCT, ROUND_TIMEOUT, PARTITION, CLIENT_CPUS, SERVER_CPUS.
+# On a Linux host, set KS_UID=$(id -u) so the containers can write ./data and ./results.
+
+x-image: &image
+  image: kubesplit:dev
+  build: .
+  user: "${KS_UID:-10001}"
+
+x-client: &client
+  <<: *image
+  command: ["client"]
+  # CPU limit = request, so every client trains at the same speed. Torch reads
+  # the cgroup quota and sizes its thread pool to match.
+  cpus: ${CLIENT_CPUS:-1}
+  environment:
+    KS_SERVER: server:50051
+  volumes:
+    - ./data:/data
+  depends_on:
+    data:
+      condition: service_completed_successfully
+    server:
+      condition: service_started
+  restart: on-failure
+
+services:
+  # Downloads CIFAR-10 once, so five containers don't race to fetch it.
+  data:
+    <<: *image
+    command: ["prepare-data"]
+    environment:
+      KS_DATASET: ${DATASET:-cifar10}
+    volumes:
+      - ./data:/data
+
+  server:
+    <<: *image
+    command: ["server"]
+    hostname: server
+    cpus: ${SERVER_CPUS:-2}
+    environment:
+      KS_MODE: ${MODE:-decoupled}
+      KS_CLIENTS: "4"
+      KS_ROUNDS: ${ROUNDS:-3}
+      KS_DATASET: ${DATASET:-cifar10}
+      KS_MAX_BATCHES: ${MAX_BATCHES:-0}
+      KS_QUORUM_PCT: ${QUORUM_PCT:-100}
+      KS_ROUND_TIMEOUT: ${ROUND_TIMEOUT:-600}
+      KS_PARTITION: ${PARTITION:-iid}
+      KS_RUN_ID: ${RUN_ID:-}
+    volumes:
+      - ./data:/data
+      - ./results:/results
+    depends_on:
+      data:
+        condition: service_completed_successfully
+
+  # The shard comes from the hostname's trailing ordinal, as with StatefulSet pods.
+  client-0:
+    <<: *client
+    hostname: client-0
+  client-1:
+    <<: *client
+    hostname: client-1
+  client-2:
+    <<: *client
+    hostname: client-2
+  client-3:
+    <<: *client
+    hostname: client-3
