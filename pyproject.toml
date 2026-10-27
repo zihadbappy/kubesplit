@@ -10,6 +10,7 @@ dependencies = [
     # Generated stubs in kubesplit/ require at least the versions that made them.
     "grpcio>=1.85",
     "protobuf>=7.35.1,<8",
+    "prometheus-client>=0.20",
 ]
 
 [project.optional-dependencies]

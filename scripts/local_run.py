@@ -23,6 +23,12 @@ def main() -> int:
     p.add_argument("--dataset", choices=["cifar10", "fake"], default="cifar10")
     p.add_argument("--max-batches", type=int, default=0)
     p.add_argument("--port", type=int, default=50051)
+    p.add_argument(
+        "--metrics-port",
+        type=int,
+        default=8000,
+        help="server's /metrics port; client i uses this + 1 + i (one host, so no clashes)",
+    )
     p.add_argument("--threads", type=int, default=0, help="torch threads per process; 0 = auto")
     p.add_argument("--results-dir", default="results")
     a, server_extra = p.parse_known_args()
@@ -37,6 +43,7 @@ def main() -> int:
         "--dataset": a.dataset,
         "--max-batches": a.max_batches,
         "--port": a.port,
+        "--metrics-port": a.metrics_port,
         "--results-dir": a.results_dir,
     }
     server_cmd = [*py, "server", *common, *server_extra]
@@ -47,7 +54,8 @@ def main() -> int:
     clients = []
     for i in range(a.clients):
         cmd = [*py, "client", *common, "--server", f"localhost:{a.port}", "--shard", str(i)]
-        clients.append(subprocess.Popen([*cmd, "--client-id", f"client-{i}"]))
+        cmd += ["--client-id", f"client-{i}", "--metrics-port", str(a.metrics_port + 1 + i)]
+        clients.append(subprocess.Popen(cmd))
     codes = [c.wait() for c in clients] + [server.wait()]
     return max(codes, key=abs)
 

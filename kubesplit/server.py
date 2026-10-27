@@ -21,6 +21,7 @@ from torch.utils.data import DataLoader, Dataset
 from kubesplit import kubesplit_pb2 as pb
 from kubesplit import kubesplit_pb2_grpc as pb_grpc
 from kubesplit.data import load_dataset
+from kubesplit.metrics import ServerMetrics
 from kubesplit.rounds import RoundClosed, RoundCoordinator, State
 from kubesplit.runtime import GRPC_OPTIONS, LONG_POLL_SECONDS, add_common_args, device, env, setup
 from kubesplit.split import ServerWorker, client_modules, evaluate
@@ -84,6 +85,12 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
             on_close=self._on_round_closed,
         )
 
+        self.metrics = m = ServerMetrics()
+        # Read at scrape time, so they are never stale.
+        m.round.set_function(lambda: self.coord.round)
+        m.training_done.set_function(lambda: float(self.coord.done))
+        m.clients_joined.set_function(lambda: len(self.clients))
+
     # -- RPCs --------------------------------------------------------------
     def Join(self, request, context):
         if not 0 <= request.shard < self.cfg.num_clients:
@@ -94,6 +101,7 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         with self._lock:
             clash = [c for c, s in self.clients.items() if s == request.shard]
             self.clients[request.client_id] = request.shard
+        self.metrics.client_joins.inc()
         if clash and clash != [request.client_id]:
             log.warning("shard %d claimed by %s and %s", request.shard, clash, request.client_id)
         log.info("client %s joined with shard %d", request.client_id, request.shard)
@@ -108,8 +116,7 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         reply = pb.RoundInfo(round=rnd)
         if state is not None:
             reply.global_state.CopyFrom(self._serialized_state(rnd, state))
-            with self._lock:
-                self._traffic.bytes_sync += reply.ByteSize()
+            self._count_sync(reply.ByteSize())
         return reply
 
     def Step(self, request, context):
@@ -118,8 +125,7 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
                 grpc.StatusCode.FAILED_PRECONDITION, "decoupled mode: use StreamActivations"
             )
         h, y = from_proto(request.activations), from_proto(request.labels)
-        with self._top_lock:
-            res = self.worker.step(h, y, want_grad=True)
+        res = self._train_top(h, y, want_grad=True)
         reply = pb.Gradients(grad=to_proto(res.grad), loss=res.loss, correct=res.correct)
         self._count(request.ByteSize(), reply.ByteSize(), y.numel(), res.loss, res.correct)
         return reply
@@ -130,8 +136,7 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         summary = pb.StreamSummary()
         for request in request_iterator:
             h, y = from_proto(request.activations), from_proto(request.labels)
-            with self._top_lock:
-                res = self.worker.step(h, y, want_grad=False)
+            res = self._train_top(h, y, want_grad=False)
             n = y.numel()
             self._count(request.ByteSize(), 0, n, res.loss, res.correct)
             summary.batches += 1
@@ -144,14 +149,23 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         state = state_from_proto(request.state)
         if set(state) != self._keys:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, "state dict keys do not match model")
-        with self._lock:
-            self._traffic.bytes_sync += request.ByteSize()
+        self._count_sync(request.ByteSize())
         accepted = self.coord.submit(request.client_id, request.round, state, request.num_samples)
         if not accepted:
+            self.metrics.late_updates.inc()
             log.info("discarded late update from %s for round %d", request.client_id, request.round)
         return pb.UpdateAck(accepted=accepted, current_round=self.coord.round)
 
     # -- internals ---------------------------------------------------------
+    def _train_top(self, h: torch.Tensor, y: torch.Tensor, want_grad: bool):
+        t0 = time.perf_counter()
+        with self._top_lock:
+            t1 = time.perf_counter()
+            res = self.worker.step(h, y, want_grad=want_grad)
+        self.metrics.lock_wait_seconds.observe(t1 - t0)
+        self.metrics.step_seconds.observe(time.perf_counter() - t1)
+        return res
+
     def _count(self, up: int, down: int, n: int, loss: float, correct: int) -> None:
         with self._lock:
             t = self._traffic
@@ -160,6 +174,15 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
             t.samples += n
             t.loss_sum += loss * n
             t.correct += correct
+        m = self.metrics
+        m.transferred_bytes.labels("activations").inc(up)
+        m.transferred_bytes.labels("gradients").inc(down)
+        m.server_samples.inc(n)
+
+    def _count_sync(self, nbytes: int) -> None:
+        with self._lock:
+            self._traffic.bytes_sync += nbytes
+        self.metrics.transferred_bytes.labels("weights").inc(nbytes)
 
     def _serialized_state(self, rnd: int, state: State) -> pb.StateDict:
         """Every client fetches the same weights each round; serialize once."""
@@ -193,6 +216,12 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         }
         self.rows.append(row)
         self._append_csv(row)
+        m = self.metrics
+        m.round_duration.observe(info.seconds)
+        m.rounds.labels(info.reason).inc()
+        m.round_clients_reporting.set(len(info.clients))
+        m.test_accuracy.set(acc / 100.0)
+        m.train_loss.set(row["train_loss"])
         log.info(
             "round %d closed by %s (%d/%d clients) | test %.1f%% | "
             "up %.1f MiB down %.1f MiB | %.1fs",
@@ -264,6 +293,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dataset", choices=["cifar10", "fake"], default=env("DATASET", "cifar10"))
     p.add_argument("--max-batches", type=int, default=env("MAX_BATCHES", "0"))
     p.add_argument("--port", type=int, default=env("PORT", "50051"))
+    p.add_argument("--metrics-port", type=int, default=env("METRICS_PORT", "8000"), help="0 = off")
     p.add_argument("--results-dir", default=env("RESULTS_DIR", "results"))
     p.add_argument("--run-id", default=env("RUN_ID", ""))
     p.add_argument("--done-grace", type=float, default=env("DONE_GRACE", "30"))
@@ -306,6 +336,8 @@ def main(argv=None) -> int:
         a.rounds,
         servicer.coord.quorum,
     )
+    if a.metrics_port:
+        log.info("metrics on :%d/metrics", servicer.metrics.serve(a.metrics_port))
     Server(servicer, a.port).start().run_until_done(a.done_grace)
     log.info("results written to %s", results_path)
     return 0

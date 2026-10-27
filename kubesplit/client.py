@@ -20,6 +20,7 @@ from torch.utils.data import DataLoader
 from kubesplit import kubesplit_pb2 as pb
 from kubesplit import kubesplit_pb2_grpc as pb_grpc
 from kubesplit.data import client_shards, load_dataset
+from kubesplit.metrics import ClientMetrics
 from kubesplit.runtime import (
     GRPC_OPTIONS,
     LONG_POLL_SECONDS,
@@ -37,34 +38,50 @@ log = logging.getLogger("kubesplit.client")
 STEP_TIMEOUT = 120.0
 
 
-def _vanilla_round(stub, worker, batches, client_id, rnd) -> tuple[int, float, int]:
+def _vanilla_round(stub, worker, batches, client_id, rnd, m) -> tuple[int, float, int]:
     """One gradient round trip per batch: the client idles while it waits."""
+    compute, blocked = m.batch_seconds.labels("compute"), m.batch_seconds.labels("blocked")
     n = correct = 0
     loss_sum = 0.0
     for x, y in batches:
+        t0 = time.perf_counter()
         h = worker.forward(x)
         msg = pb.Activations(
             client_id=client_id, round=rnd, activations=to_proto(h), labels=to_proto(y)
         )
+        t1 = time.perf_counter()
         g = stub.Step(msg, timeout=STEP_TIMEOUT)
+        t2 = time.perf_counter()
         worker.backward(from_proto(g.grad))
+        compute.observe((t1 - t0) + (time.perf_counter() - t2))
+        blocked.observe(t2 - t1)
+        m.samples.inc(y.numel())
         n += y.numel()
         loss_sum += g.loss * y.numel()
         correct += g.correct
     return n, loss_sum, correct
 
 
-def _decoupled_round(stub, worker, batches, client_id, rnd) -> tuple[int, float, int]:
+def _decoupled_round(stub, worker, batches, client_id, rnd, m) -> tuple[int, float, int]:
     """Train locally and stream activations; nothing comes back per batch."""
+    compute, blocked = m.batch_seconds.labels("compute"), m.batch_seconds.labels("blocked")
     error: list[BaseException] = []
 
     def requests():
         try:
             for x, y in batches:
+                t0 = time.perf_counter()
                 h, _ = worker.local_step(x, y)
-                yield pb.Activations(
+                msg = pb.Activations(
                     client_id=client_id, round=rnd, activations=to_proto(h), labels=to_proto(y)
                 )
+                t1 = time.perf_counter()
+                compute.observe(t1 - t0)
+                yield msg
+                # gRPC asks for the next message once it has room to send: any time
+                # spent here is backpressure from the network or a busy server.
+                blocked.observe(time.perf_counter() - t1)
+                m.samples.inc(y.numel())
         except BaseException as e:  # gRPC swallows iterator errors; re-raise below
             error.append(e)
             raise
@@ -85,8 +102,10 @@ def run_client(
     data_root: str = "./data",
     device: str = "cpu",
     connect_timeout: float = 300.0,
+    metrics: ClientMetrics | None = None,
 ) -> int:
     """Train until the server says done. Returns the number of rounds trained."""
+    m = metrics or ClientMetrics()
     with grpc.insecure_channel(server, options=GRPC_OPTIONS) as channel:
         stub = pb_grpc.SplitLearningStub(channel)
         join = pb.JoinRequest(client_id=client_id, shard=shard)
@@ -108,6 +127,7 @@ def run_client(
         train_round = _vanilla_round if cfg.mode == "vanilla" else _decoupled_round
 
         last = trained = 0
+        idle_since = time.perf_counter()
         while True:
             info = stub.WaitRound(
                 pb.RoundRequest(client_id=client_id, last_round=last),
@@ -118,12 +138,15 @@ def run_client(
                 break
             if info.round == 0:  # long-poll expired, nothing new
                 continue
+            m.idle_seconds.observe(time.perf_counter() - idle_since)
+            m.round.set(info.round)
 
             worker.modules().load_state_dict(state_from_proto(info.global_state))
             worker.train()
             t0 = time.perf_counter()
             batches = itertools.islice(loader, cfg.max_batches or None)
-            n, loss_sum, correct = train_round(stub, worker, batches, client_id, info.round)
+            n, loss_sum, correct = train_round(stub, worker, batches, client_id, info.round, m)
+            m.round_seconds.observe(time.perf_counter() - t0)
             update = pb.Update(
                 client_id=client_id,
                 round=info.round,
@@ -143,6 +166,7 @@ def run_client(
             )
             last = info.round
             trained += 1
+            idle_since = time.perf_counter()
     log.info("%s done after %d rounds", client_id, trained)
     return trained
 
@@ -153,6 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--shard", type=int, default=env("SHARD", "-1"), help="-1 = from hostname")
     p.add_argument("--client-id", default=env("CLIENT_ID", socket.gethostname()))
     p.add_argument("--connect-timeout", type=float, default=env("CONNECT_TIMEOUT", "300"))
+    p.add_argument("--metrics-port", type=int, default=env("METRICS_PORT", "8000"), help="0 = off")
     add_common_args(p)
     return p
 
@@ -163,5 +188,8 @@ def main(argv=None) -> int:
     shard = a.shard if a.shard >= 0 else shard_from_hostname()
     if shard is None:
         raise SystemExit("no --shard / KS_SHARD and hostname has no trailing ordinal")
-    run_client(a.server, a.client_id, shard, a.data_root, device(), a.connect_timeout)
+    metrics = ClientMetrics()
+    if a.metrics_port:
+        log.info("metrics on :%d/metrics", metrics.serve(a.metrics_port))
+    run_client(a.server, a.client_id, shard, a.data_root, device(), a.connect_timeout, metrics)
     return 0

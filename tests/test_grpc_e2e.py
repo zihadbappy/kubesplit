@@ -10,6 +10,7 @@ from kubesplit import kubesplit_pb2 as pb
 from kubesplit import kubesplit_pb2_grpc as pb_grpc
 from kubesplit.client import run_client
 from kubesplit.data import load_dataset
+from kubesplit.metrics import ClientMetrics
 from kubesplit.server import Server, SplitLearningServicer
 from kubesplit.tensors import to_proto
 
@@ -52,12 +53,16 @@ def start_server():
         s.grpc.stop(grace=0)
 
 
-def run_clients(port, shards):
+def run_clients(port, shards, metrics=None):
     trained = {}
 
     def go(shard):
         trained[shard] = run_client(
-            f"localhost:{port}", f"client-{shard}", shard, connect_timeout=30
+            f"localhost:{port}",
+            f"client-{shard}",
+            shard,
+            connect_timeout=30,
+            metrics=metrics[shard] if metrics else None,
         )
 
     threads = [threading.Thread(target=go, args=(s,)) for s in shards]
@@ -85,6 +90,55 @@ def test_full_run(start_server, tmp_path, mode):
         assert (int(r["bytes_down"]) > 0) == (mode == "vanilla")
 
 
+@pytest.mark.parametrize("mode", ["vanilla", "decoupled"])
+def test_metrics_agree_with_results(start_server, mode):
+    servicer, server, loop = start_server(mode, clients=3, rounds=2)
+    clients = {s: ClientMetrics() for s in range(3)}
+    assert run_clients(server.port, [0, 1, 2], clients) == {0: 2, 1: 2, 2: 2}
+    loop.join(timeout=30)
+
+    def srv(name, **labels):
+        return servicer.metrics.registry.get_sample_value(name, labels)
+
+    rows = servicer.rows
+    # Traffic counters equal the per-round CSV columns summed.
+    acts = srv("kubesplit_transferred_bytes_total", kind="activations")
+    grads = srv("kubesplit_transferred_bytes_total", kind="gradients")
+    assert acts == sum(r["bytes_up"] for r in rows)
+    assert grads == sum(r["bytes_down"] for r in rows)
+    assert srv("kubesplit_transferred_bytes_total", kind="weights") == sum(
+        r["bytes_sync"] for r in rows
+    )
+    assert (grads > 0) == (mode == "vanilla")
+
+    batches = 3 * 3 * 2  # clients x max_batches x rounds
+    assert srv("kubesplit_server_samples_total") == batches * 32
+    assert srv("kubesplit_server_step_seconds_count") == batches
+    assert srv("kubesplit_server_lock_wait_seconds_count") == batches
+    assert srv("kubesplit_rounds_total", reason="quorum") == 2
+    assert srv("kubesplit_rounds_total", reason="timeout") == 0
+    assert srv("kubesplit_round_duration_seconds_count") == 2
+    assert srv("kubesplit_round_clients_reporting") == 3
+    assert srv("kubesplit_round") == 2 and srv("kubesplit_training_done") == 1
+    assert srv("kubesplit_client_joins_total") == 3 and srv("kubesplit_clients_joined") == 3
+    assert srv("kubesplit_late_updates_total") == 0
+    assert srv("kubesplit_test_accuracy_ratio") == pytest.approx(
+        rows[-1]["test_acc"] / 100, abs=1e-4
+    )
+
+    for m in clients.values():
+
+        def cli(name, **labels):
+            return m.registry.get_sample_value(name, labels)  # noqa: B023
+
+        assert cli("kubesplit_client_samples_total") == 2 * 3 * 32
+        assert cli("kubesplit_client_batch_seconds_count", phase="compute") == 6
+        assert cli("kubesplit_client_batch_seconds_count", phase="blocked") == 6
+        assert cli("kubesplit_client_round_seconds_count") == 2
+        assert cli("kubesplit_client_idle_seconds_count") == 2
+        assert cli("kubesplit_client_round") == 2
+
+
 def test_quorum_lets_rounds_close_without_a_missing_client(start_server):
     servicer, server, loop = start_server("decoupled", clients=3, quorum_pct=60)
     assert run_clients(server.port, [0, 1]) == {0: 2, 1: 2}
@@ -97,6 +151,9 @@ def test_timeout_closes_rounds_without_a_missing_client(start_server):
     assert run_clients(server.port, [0, 1]) == {0: 2, 1: 2}
     assert [r["close_reason"] for r in servicer.rows] == ["timeout", "timeout"]
     assert [r["reporting"] for r in servicer.rows] == [2, 2]
+    reg = servicer.metrics.registry
+    assert reg.get_sample_value("kubesplit_rounds_total", {"reason": "timeout"}) == 2
+    assert reg.get_sample_value("kubesplit_round_clients_reporting") == 2
 
 
 def test_rejects_bad_shard_and_wrong_mode_rpc(start_server):

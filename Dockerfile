@@ -24,5 +24,6 @@ USER 10001
 
 ENV KS_DATA_ROOT=/data \
     KS_RESULTS_DIR=/results
-EXPOSE 50051
+# 50051 = gRPC (server only), 8000 = Prometheus /metrics (every role)
+EXPOSE 50051 8000
 ENTRYPOINT ["python", "-m", "kubesplit"]

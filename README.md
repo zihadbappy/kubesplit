@@ -50,12 +50,39 @@ Tensors travel as dtype + shape + raw bytes (`kubesplit/tensors.py`), never pick
 
 Every flag also reads a `KS_*` environment variable: `KS_MODE`, `KS_CLIENTS`,
 `KS_ROUNDS`, `KS_QUORUM_PCT`, `KS_ROUND_TIMEOUT`, `KS_PARTITION`, `KS_ALPHA`,
-`KS_DATASET` (`cifar10`/`fake`), `KS_MAX_BATCHES`, `KS_SERVER`, `KS_SHARD`, `KS_THREADS`.
+`KS_DATASET` (`cifar10`/`fake`), `KS_MAX_BATCHES`, `KS_SERVER`, `KS_SHARD`, `KS_THREADS`,
+`KS_METRICS_PORT` (default 8000; 0 turns metrics off).
 Torch sizes its thread pool from the container's cgroup CPU quota, not the host core count.
 
 Results: one CSV per run in `results/`, one row per round: test accuracy, train
 loss and accuracy, `bytes_up` / `bytes_down` / `bytes_sync` (serialized message sizes),
 round time, and the number of clients that reported.
+
+## Metrics
+
+Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.py`).
+
+| Server metric | Type | Answers |
+|---|---|---|
+| `kubesplit_round`, `kubesplit_training_done` | gauge | Where is training? |
+| `kubesplit_round_duration_seconds` | histogram | How long does a round take? |
+| `kubesplit_rounds_total{reason}` | counter | Do rounds close by quorum or by timeout? |
+| `kubesplit_round_clients_reporting` | gauge | How many clients made the last round? |
+| `kubesplit_late_updates_total` | counter | How often is a straggler's work thrown away? |
+| `kubesplit_client_joins_total`, `kubesplit_clients_joined` | counter, gauge | Did a killed client come back? |
+| `kubesplit_test_accuracy_ratio`, `kubesplit_train_loss` | gauge | Is the model learning? |
+| `kubesplit_transferred_bytes_total{kind}` | counter | Bytes of activations, gradients, weights |
+| `kubesplit_server_samples_total` | counter | Server throughput (use `rate()`) |
+| `kubesplit_server_step_seconds` | histogram | Top-model compute per batch |
+| `kubesplit_server_lock_wait_seconds` | histogram | How long batches queue for the shared top model |
+
+| Client metric | Type | Answers |
+|---|---|---|
+| `kubesplit_client_batch_seconds{phase}` | histogram | Per batch: `compute` (local) vs `blocked` (network + server) |
+| `kubesplit_client_samples_total` | counter | Client throughput (use `rate()`) |
+| `kubesplit_client_round_seconds` | histogram | Time to train one round's shard |
+| `kubesplit_client_idle_seconds` | histogram | Time waiting at the round barrier |
+| `kubesplit_client_round` | gauge | Round this client is on |
 
 ## Layout
 
