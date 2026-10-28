@@ -1,0 +1,79 @@
+# A StatefulSet (not a Deployment) because each client needs a stable,
+# numbered identity: pod <release>-client-3 always trains shard 3, even after
+# it is killed and recreated.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "kubesplit.fullname" . }}-client
+  labels:
+    {{- include "kubesplit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: client
+spec:
+  serviceName: {{ include "kubesplit.fullname" . }}-client
+  # One pod per shard; the server expects exactly this many clients.
+  replicas: {{ .Values.run.clients }}
+  # Start all clients at once. The default (OrderedReady) starts them one by
+  # one, each waiting for the previous pod to be Ready.
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "kubesplit.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: client
+  template:
+    metadata:
+      labels:
+        {{- include "kubesplit.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: client
+      annotations:
+        # Clients idle after training. Any change to the run settings changes
+        # this hash, which makes Kubernetes replace the pods for the new run.
+        checksum/run: {{ .Values.run | toJson | sha256sum }}
+    spec:
+      securityContext:
+        {{- include "kubesplit.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: client
+          image: {{ include "kubesplit.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["client"]
+          # No KS_SHARD: the client reads it from its hostname (the pod name).
+          env:
+            - name: KS_SERVER
+              value: "{{ include "kubesplit.serverName" . }}:{{ .Values.server.port }}"
+            - name: KS_METRICS_PORT
+              value: {{ .Values.client.metricsPort | quote }}
+            - name: KS_CONNECT_TIMEOUT
+              value: {{ .Values.client.connectTimeout | quote }}
+            # An exited container gets restarted, which would rejoin in a loop.
+            - name: KS_EXIT_ON_DONE
+              value: "false"
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.client.metricsPort }}
+          # The metrics endpoint starts first thing, so "Ready" = process is up.
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.client.resources | nindent 12 }}
+          securityContext:
+            {{- include "kubesplit.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.client.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.client.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -31,6 +31,24 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
 {{- end }}
 
+{{/* Pod-level security: run as the image's non-root user (uid 10001). */}}
+{{- define "kubesplit.podSecurityContext" -}}
+runAsNonRoot: true
+runAsUser: 10001
+runAsGroup: 10001
+fsGroup: 10001
+seccompProfile:
+  type: RuntimeDefault
+{{- end }}
+
+{{/* Container-level security: no privilege escalation, no capabilities, read-only root. */}}
+{{- define "kubesplit.containerSecurityContext" -}}
+allowPrivilegeEscalation: false
+readOnlyRootFilesystem: true
+capabilities:
+  drop: ["ALL"]
+{{- end }}
+
 {{/* In-cluster DNS name clients use to reach the server's Service. */}}
 {{- define "kubesplit.serverName" -}}
 {{ include "kubesplit.fullname" . }}-server

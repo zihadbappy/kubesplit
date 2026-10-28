@@ -1,0 +1,19 @@
+# Headless Service (clusterIP: None): no virtual IP and no load balancing.
+# A StatefulSet requires one. It gives each pod its own DNS record
+# (<release>-client-3.<release>-client) and lets Prometheus find every client pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubesplit.fullname" . }}-client
+  labels:
+    {{- include "kubesplit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: client
+spec:
+  clusterIP: None
+  selector:
+    {{- include "kubesplit.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: client
+  ports:
+    - name: metrics
+      port: {{ .Values.client.metricsPort }}
+      targetPort: metrics

@@ -23,12 +23,7 @@ spec:
         app.kubernetes.io/component: server
     spec:
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 10001
-        runAsGroup: 10001
-        fsGroup: 10001
-        seccompProfile:
-          type: RuntimeDefault
+        {{- include "kubesplit.podSecurityContext" . | nindent 8 }}
       containers:
         - name: server
           image: {{ include "kubesplit.image" . }}
@@ -82,10 +77,7 @@ spec:
           resources:
             {{- toYaml .Values.server.resources | nindent 12 }}
           securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
+            {{- include "kubesplit.containerSecurityContext" . | nindent 12 }}
           # The root filesystem is read-only; these are the only writable paths.
           volumeMounts:
             - name: data

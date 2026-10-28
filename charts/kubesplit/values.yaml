@@ -33,3 +33,20 @@ server:
       memory: 2Gi
   nodeSelector: {}
   tolerations: []
+
+# One client pod per run.clients, named <release>-client-0, -1, ...;
+# the trailing number is the pod's data shard.
+client:
+  metricsPort: 8000
+  # How long a client keeps retrying to reach the server at startup (seconds).
+  connectTimeout: 900
+  # Same reasoning as the server: requests == limits for steady timings.
+  resources:
+    requests:
+      cpu: "1"
+      memory: 1536Mi
+    limits:
+      cpu: "1"
+      memory: 1536Mi
+  nodeSelector: {}
+  tolerations: []

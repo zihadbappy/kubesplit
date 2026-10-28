@@ -11,6 +11,7 @@ import argparse
 import itertools
 import logging
 import socket
+import threading
 import time
 
 import grpc
@@ -27,6 +28,7 @@ from kubesplit.runtime import (
     add_common_args,
     device,
     env,
+    parse_bool,
     setup,
     shard_from_hostname,
 )
@@ -178,6 +180,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--client-id", default=env("CLIENT_ID", socket.gethostname()))
     p.add_argument("--connect-timeout", type=float, default=env("CONNECT_TIMEOUT", "300"))
     p.add_argument("--metrics-port", type=int, default=env("METRICS_PORT", "8000"), help="0 = off")
+    p.add_argument(
+        "--exit-on-done",
+        type=parse_bool,
+        default=env("EXIT_ON_DONE", "true"),
+        help="false = stay up after training (Kubernetes would restart an exited client)",
+    )
     add_common_args(p)
     return p
 
@@ -192,4 +200,7 @@ def main(argv=None) -> int:
     if a.metrics_port:
         log.info("metrics on :%d/metrics", metrics.serve(a.metrics_port))
     run_client(a.server, a.client_id, shard, a.data_root, device(), a.connect_timeout, metrics)
+    if not a.exit_on_done:
+        log.info("staying up for metrics scrapes (KS_EXIT_ON_DONE=false)")
+        threading.Event().wait()  # until the pod is deleted (SIGTERM)
     return 0
