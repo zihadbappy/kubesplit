@@ -1,0 +1,22 @@
+# A stable name for the server pod: clients dial <release>-server:<port>, and
+# cluster DNS resolves it to whichever pod currently matches the selector.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubesplit.serverName" . }}
+  labels:
+    {{- include "kubesplit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP  # reachable only inside the cluster
+  selector:
+    {{- include "kubesplit.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+  ports:
+    - name: grpc
+      port: {{ .Values.server.port }}
+      targetPort: grpc
+      appProtocol: grpc
+    - name: metrics
+      port: {{ .Values.server.metricsPort }}
+      targetPort: metrics

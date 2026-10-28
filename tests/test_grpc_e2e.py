@@ -19,7 +19,15 @@ from kubesplit.tensors import to_proto
 def start_server():
     started = []
 
-    def start(mode, clients=3, rounds=2, quorum_pct=100.0, round_timeout=60.0, results_path=None):
+    def start(
+        mode,
+        clients=3,
+        rounds=2,
+        quorum_pct=100.0,
+        round_timeout=60.0,
+        results_path=None,
+        exit_on_done=True,
+    ):
         cfg = pb.RunConfig(
             mode=mode,
             num_clients=clients,
@@ -41,9 +49,8 @@ def start_server():
             poll_seconds=1.0,
         )
         server = Server(servicer, port=0).start()
-        t = threading.Thread(
-            target=server.run_until_done, kwargs={"grace": 5, "tick": 0.05}, daemon=True
-        )
+        loop = server.run_until_done if exit_on_done else server.wait_until_done
+        t = threading.Thread(target=loop, kwargs={"grace": 5, "tick": 0.05}, daemon=True)
         t.start()
         started.append(server)
         return servicer, server, t
@@ -137,6 +144,17 @@ def test_metrics_agree_with_results(start_server, mode):
         assert cli("kubesplit_client_round_seconds_count") == 2
         assert cli("kubesplit_client_idle_seconds_count") == 2
         assert cli("kubesplit_client_round") == 2
+
+
+def test_server_that_stays_up_tells_a_restarted_client_it_is_done(start_server):
+    # In Kubernetes the server keeps running after training (KS_EXIT_ON_DONE=false),
+    # and a client pod that restarts afterwards must exit cleanly instead of training.
+    servicer, server, loop = start_server("decoupled", clients=2, exit_on_done=False)
+    assert run_clients(server.port, [0, 1]) == {0: 2, 1: 2}
+    loop.join(timeout=30)
+    assert not loop.is_alive() and servicer.coord.done
+    assert run_clients(server.port, [0]) == {0: 0}  # rejoins, told done, trains nothing
+    assert len(servicer.rows) == 2
 
 
 def test_quorum_lets_rounds_close_without_a_missing_client(start_server):

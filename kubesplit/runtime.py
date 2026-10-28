@@ -26,6 +26,16 @@ def env(name: str, default: str) -> str:
     return os.environ.get(f"KS_{name}", default)
 
 
+def parse_bool(s: str) -> bool:
+    """argparse type for env-style booleans: true/false, 1/0, yes/no."""
+    v = s.strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    raise ValueError(f"not a boolean: {s!r}")
+
+
 def shard_from_hostname(hostname: str | None = None) -> int | None:
     """Trailing ordinal of a StatefulSet pod (kubesplit-client-3 -> 3) or Compose host."""
     m = re.search(r"-(\d+)$", hostname or socket.gethostname())

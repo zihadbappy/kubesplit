@@ -23,7 +23,15 @@ from kubesplit import kubesplit_pb2_grpc as pb_grpc
 from kubesplit.data import load_dataset
 from kubesplit.metrics import ServerMetrics
 from kubesplit.rounds import RoundClosed, RoundCoordinator, State
-from kubesplit.runtime import GRPC_OPTIONS, LONG_POLL_SECONDS, add_common_args, device, env, setup
+from kubesplit.runtime import (
+    GRPC_OPTIONS,
+    LONG_POLL_SECONDS,
+    add_common_args,
+    device,
+    env,
+    parse_bool,
+    setup,
+)
 from kubesplit.split import ServerWorker, client_modules, evaluate
 from kubesplit.tensors import from_proto, state_from_proto, state_to_proto, to_proto
 
@@ -270,12 +278,19 @@ class Server:
         log.info("listening on :%d", self.port)
         return self
 
-    def run_until_done(self, grace: float = 30.0, tick: float = 0.5) -> None:
+    def wait_until_done(self, grace: float = 30.0, tick: float = 0.5) -> None:
+        """Drive round timeouts until training is over and clients have been told."""
         while not self.servicer.finished(grace):
             self.servicer.coord.check_timeout()
             time.sleep(tick)
-        log.info("training finished; shutting down")
+
+    def stop(self) -> None:
         self.grpc.stop(grace=2).wait()
+
+    def run_until_done(self, grace: float = 30.0, tick: float = 0.5) -> None:
+        self.wait_until_done(grace, tick)
+        log.info("training finished; shutting down")
+        self.stop()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -297,6 +312,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--results-dir", default=env("RESULTS_DIR", "results"))
     p.add_argument("--run-id", default=env("RUN_ID", ""))
     p.add_argument("--done-grace", type=float, default=env("DONE_GRACE", "30"))
+    p.add_argument(
+        "--exit-on-done",
+        type=parse_bool,
+        default=env("EXIT_ON_DONE", "true"),
+        help="false = stay up after training (Kubernetes would restart an exited server)",
+    )
     add_common_args(p)
     return p
 
@@ -338,6 +359,12 @@ def main(argv=None) -> int:
     )
     if a.metrics_port:
         log.info("metrics on :%d/metrics", servicer.metrics.serve(a.metrics_port))
-    Server(servicer, a.port).start().run_until_done(a.done_grace)
-    log.info("results written to %s", results_path)
+    server = Server(servicer, a.port).start()
+    server.wait_until_done(a.done_grace)
+    log.info("training finished; results written to %s", results_path)
+    if a.exit_on_done:
+        server.stop()
+        return 0
+    log.info("staying up for metrics scrapes and late clients (KS_EXIT_ON_DONE=false)")
+    threading.Event().wait()  # until the pod is deleted (SIGTERM)
     return 0

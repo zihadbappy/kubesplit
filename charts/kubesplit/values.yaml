@@ -1,0 +1,35 @@
+# One training run. The server owns these settings; clients receive them on Join.
+run:
+  mode: decoupled      # vanilla | decoupled
+  clients: 4           # expected clients (quorum is a % of this)
+  rounds: 5
+  quorumPct: 100       # % of clients that must report to close a round early
+  roundTimeout: 600    # seconds; then the round closes with whoever reported
+  partition: iid       # iid | dirichlet
+  alpha: 0.5           # Dirichlet concentration (partition: dirichlet only)
+  seed: 0
+  batchSize: 64
+  lr: 0.05
+  dataset: cifar10     # cifar10 | fake (synthetic, nothing to download)
+  maxBatches: 0        # per client per round; 0 = whole shard
+  runId: ""            # results file name; empty = <mode>-c<clients>-<timestamp>
+
+image:
+  repository: kubesplit
+  tag: dev             # empty = the chart's appVersion
+  pullPolicy: IfNotPresent
+
+server:
+  port: 50051
+  metricsPort: 8000
+  # requests == limits gives the pod "Guaranteed" QoS: it always gets exactly
+  # this much CPU, so round timings don't depend on what else runs on the node.
+  resources:
+    requests:
+      cpu: "2"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  nodeSelector: {}
+  tolerations: []

@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubesplit.serverName" . }}
+  labels:
+    {{- include "kubesplit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  # Exactly one: round state lives in this process's memory.
+  replicas: 1
+  # Stop the old pod before starting a new one. The default (RollingUpdate)
+  # would briefly run two servers, and clients could split between them.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "kubesplit.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        {{- include "kubesplit.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: server
+          image: {{ include "kubesplit.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["server"]
+          env:
+            - name: KS_MODE
+              value: {{ .Values.run.mode | quote }}
+            - name: KS_CLIENTS
+              value: {{ .Values.run.clients | quote }}
+            - name: KS_ROUNDS
+              value: {{ .Values.run.rounds | quote }}
+            - name: KS_QUORUM_PCT
+              value: {{ .Values.run.quorumPct | quote }}
+            - name: KS_ROUND_TIMEOUT
+              value: {{ .Values.run.roundTimeout | quote }}
+            - name: KS_PARTITION
+              value: {{ .Values.run.partition | quote }}
+            - name: KS_ALPHA
+              value: {{ .Values.run.alpha | quote }}
+            - name: KS_SEED
+              value: {{ .Values.run.seed | quote }}
+            - name: KS_BATCH_SIZE
+              value: {{ .Values.run.batchSize | quote }}
+            - name: KS_LR
+              value: {{ .Values.run.lr | quote }}
+            - name: KS_DATASET
+              value: {{ .Values.run.dataset | quote }}
+            - name: KS_MAX_BATCHES
+              value: {{ .Values.run.maxBatches | quote }}
+            - name: KS_RUN_ID
+              value: {{ .Values.run.runId | quote }}
+            - name: KS_PORT
+              value: {{ .Values.server.port | quote }}
+            - name: KS_METRICS_PORT
+              value: {{ .Values.server.metricsPort | quote }}
+            # An exited container gets restarted, which would start a new run.
+            - name: KS_EXIT_ON_DONE
+              value: "false"
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.server.port }}
+            - name: metrics
+              containerPort: {{ .Values.server.metricsPort }}
+          # Ready once the gRPC port accepts connections, i.e. after the test set
+          # has loaded. No liveness probe: restarting the server loses the run.
+          readinessProbe:
+            tcpSocket:
+              port: grpc
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # The root filesystem is read-only; these are the only writable paths.
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: results
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.server.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

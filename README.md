@@ -97,6 +97,7 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `kubesplit/tensors.py` | Tensor ↔ protobuf without pickle |
 | `kubesplit/baseline.py` | Single-process reference run of both modes |
 | `Dockerfile`, `docker-compose.yml` | One CPU-only image for every role; 1 server + 4 clients |
+| `charts/kubesplit/` | Helm chart; settings in `values.yaml`, validated by `values.schema.json` |
 
 Each sample crosses the cut as 64×8×8 float32 (16 KiB). Vanilla also returns
 a gradient of the same size, so it moves about 2× the bytes of decoupled mode.

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "kubesplit chart values",
+  "type": "object",
+  "required": ["run", "image", "server"],
+  "properties": {
+    "run": {
+      "type": "object",
+      "required": ["mode", "clients", "rounds"],
+      "properties": {
+        "mode": {"enum": ["vanilla", "decoupled"]},
+        "clients": {"type": "integer", "minimum": 1},
+        "rounds": {"type": "integer", "minimum": 1},
+        "quorumPct": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+        "roundTimeout": {"type": "number", "exclusiveMinimum": 0},
+        "partition": {"enum": ["iid", "dirichlet"]},
+        "alpha": {"type": "number", "exclusiveMinimum": 0},
+        "seed": {"type": "integer"},
+        "batchSize": {"type": "integer", "minimum": 1},
+        "lr": {"type": "number", "exclusiveMinimum": 0},
+        "dataset": {"enum": ["cifar10", "fake"]},
+        "maxBatches": {"type": "integer", "minimum": 0},
+        "runId": {"type": "string"}
+      }
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string"},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "server": {
+      "type": "object",
+      "properties": {
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "metricsPort": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    }
+  }
+}
