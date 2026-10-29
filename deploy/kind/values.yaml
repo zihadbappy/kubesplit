@@ -1,0 +1,25 @@
+# Laptop-sized overrides for kind (Docker Desktop: 6 CPUs, ~7 GiB).
+#   helm install kubesplit charts/kubesplit -f deploy/kind/values.yaml
+# Everything not set here comes from charts/kubesplit/values.yaml.
+run:
+  dataset: fake   # synthetic data: nothing to download
+  rounds: 10
+
+server:
+  resources:
+    requests:
+      cpu: "1"
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+client:
+  connectTimeout: 300
+  resources:
+    requests:
+      cpu: 500m   # half a CPU each; 4 clients + server = 3 CPUs
+      memory: 768Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi

@@ -27,6 +27,23 @@ make compose-both          # server + 4 client containers, vanilla then decouple
 Without `make` (e.g. Windows): `python -m kubesplit {server,client,baseline} --help`
 and `python scripts/local_run.py --help`.
 
+## Run on Kubernetes (kind)
+
+Needs Docker, [kind](https://kind.sigs.k8s.io/), kubectl and Helm. Uses synthetic data,
+so nothing is downloaded; fits a 6-CPU / 7 GiB Docker Desktop.
+
+```bash
+make kind-up    # one-node cluster in Docker
+make demo       # build + load the image, helm install, wait until all pods are ready
+kubectl logs -f deployment/kubesplit-server   # watch rounds close
+make kind-down  # delete the cluster
+```
+
+Without `make`, run the commands under those targets in the `Makefile`. Server and
+clients stay up after training (`KS_EXIT_ON_DONE=false`) so their metrics remain
+scrapeable. A new run starts whenever a `run.*` value changes:
+`helm upgrade kubesplit charts/kubesplit -f deploy/kind/values.yaml --set run.mode=vanilla`.
+
 ## How a round works
 
 ```
@@ -98,6 +115,7 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `kubesplit/baseline.py` | Single-process reference run of both modes |
 | `Dockerfile`, `docker-compose.yml` | One CPU-only image for every role; 1 server + 4 clients |
 | `charts/kubesplit/` | Helm chart; settings in `values.yaml`, validated by `values.schema.json` |
+| `deploy/kind/` | Local cluster config and laptop-sized chart values |
 
 Each sample crosses the cut as 64×8×8 float32 (16 KiB). Vanilla also returns
 a gradient of the same size, so it moves about 2× the bytes of decoupled mode.

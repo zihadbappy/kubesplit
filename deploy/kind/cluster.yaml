@@ -1,0 +1,9 @@
+# Local Kubernetes cluster inside Docker, for the demo and CI.
+#   kind create cluster --config deploy/kind/cluster.yaml
+# One node acts as both control plane and worker, which keeps it light
+# enough for a laptop.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: kubesplit
+nodes:
+  - role: control-plane
