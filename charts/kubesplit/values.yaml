@@ -34,6 +34,12 @@ server:
   nodeSelector: {}
   tolerations: []
 
+# Scraping by the Prometheus Operator (e.g. kube-prometheus-stack). Leave off
+# on clusters without it: the ServiceMonitor type wouldn't exist there.
+serviceMonitor:
+  enabled: false
+  interval: 5s   # rounds can be seconds long; scrape often enough to see them
+
 # One client pod per run.clients, named <release>-client-0, -1, ...;
 # the trailing number is the pod's data shard.
 client:

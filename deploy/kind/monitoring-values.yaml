@@ -1,0 +1,37 @@
+# kube-prometheus-stack (Prometheus Operator + Prometheus + Grafana), trimmed
+# for a one-node kind cluster.
+#   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#     --version 92.14.1 -n monitoring --create-namespace -f deploy/kind/monitoring-values.yaml
+
+# Alert routing isn't needed locally.
+alertmanager:
+  enabled: false
+
+# kind binds these control-plane components to localhost inside the node, so
+# Prometheus can't reach them and their targets would sit at "down".
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+# The default alert rules assume a production cluster; on kind they'd just fire.
+defaultRules:
+  create: false
+
+prometheus:
+  prometheusSpec:
+    # By default Prometheus only reads ServiceMonitors labelled with this
+    # release's name. Read them from every release, so our chart's is found.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    retention: 2d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1Gi

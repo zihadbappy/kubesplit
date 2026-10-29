@@ -33,11 +33,16 @@ Needs Docker, [kind](https://kind.sigs.k8s.io/), kubectl and Helm. Uses syntheti
 so nothing is downloaded; fits a 6-CPU / 7 GiB Docker Desktop.
 
 ```bash
-make kind-up    # one-node cluster in Docker
-make demo       # build + load the image, helm install, wait until all pods are ready
+make kind-up        # one-node cluster in Docker
+make monitoring     # kube-prometheus-stack: Prometheus Operator, Prometheus, Grafana
+make demo           # build + load the image, helm install, wait until all pods are ready
 kubectl logs -f deployment/kubesplit-server   # watch rounds close
-make kind-down  # delete the cluster
+make prometheus-ui  # http://localhost:9090, try: kubesplit_round or up{job=~"kubesplit-.*"}
+make kind-down      # delete the cluster
 ```
+
+The chart's `ServiceMonitor` (enabled in `deploy/kind/values.yaml`) makes Prometheus
+scrape the server and every client pod every 5 s, labelled `component="server"|"client"`.
 
 Without `make`, run the commands under those targets in the `Makefile`. Server and
 clients stay up after training (`KS_EXIT_ON_DONE=false`) so their metrics remain

@@ -1,0 +1,21 @@
+{{- if .Values.serviceMonitor.enabled }}
+# Tells the Prometheus Operator to scrape the "metrics" port of every pod
+# behind this release's Services: the server and each client pod.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "kubesplit.fullname" . }}
+  labels:
+    {{- include "kubesplit.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "kubesplit.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+      relabelings:
+        # Add component="server" or "client" to every series, from the pod label.
+        - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+          targetLabel: component
+{{- end }}

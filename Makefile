@@ -4,9 +4,10 @@ MODE ?= decoupled
 ARGS ?=
 KIND_CLUSTER ?= kubesplit
 KUBECTX = kind-$(KIND_CLUSTER)
+KPS_VERSION ?= 92.14.1
 
 .PHONY: install proto test lint fmt baseline baseline-quick local image compose-up compose-both \
-	helm-lint kind-up kind-load demo kind-down clean
+	helm-lint kind-up kind-load monitoring prometheus-ui demo kind-down clean
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -63,6 +64,20 @@ kind-up:
 # kind nodes can't see local Docker images; copy ours in.
 kind-load: image
 	kind load docker-image kubesplit:dev --name $(KIND_CLUSTER)
+
+# Prometheus Operator + Prometheus + Grafana. Run before `demo`: the kind values
+# enable our ServiceMonitor, which needs the operator's CRDs.
+monitoring:
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts \
+		--force-update
+	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+		--version $(KPS_VERSION) -n monitoring --create-namespace \
+		-f deploy/kind/monitoring-values.yaml --kube-context $(KUBECTX) --wait --timeout 15m
+
+# Prometheus UI at http://localhost:9090 (Ctrl+C to stop).
+prometheus-ui:
+	kubectl --context $(KUBECTX) -n monitoring port-forward \
+		svc/monitoring-kube-prometheus-prometheus 9090:9090
 
 # Install (or upgrade) the chart with laptop-sized values; ARGS="--set run.mode=vanilla".
 demo: kind-load

@@ -5,6 +5,10 @@ run:
   dataset: fake   # synthetic data: nothing to download
   rounds: 10
 
+# kube-prometheus-stack runs on kind (deploy/kind/monitoring-values.yaml).
+serviceMonitor:
+  enabled: true
+
 server:
   resources:
     requests:
