@@ -8,8 +8,14 @@ terraform {
     }
   }
 
-  # Local state on purpose: this stack creates the bucket that holds the
-  # cluster stack's state. Keep terraform.tfstate safe (it is gitignored).
+  # State lives in the bucket this stack creates, next to the cluster's:
+  #   terraform init -backend-config="bucket=<project_id>-tfstate"
+  # In a new project the bucket doesn't exist yet: comment this block out,
+  # apply once with local state, restore it, then move the state in with
+  #   terraform init -migrate-state -backend-config="bucket=<project_id>-tfstate"
+  backend "gcs" {
+    prefix = "bootstrap"
+  }
 }
 
 provider "google" {

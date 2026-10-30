@@ -51,7 +51,7 @@ resource "google_artifact_registry_repository" "images" {
   depends_on = [google_project_service.apis]
 }
 
-# -- Terraform state for infra/cluster --------------------------------------
+# -- Terraform state for both stacks ----------------------------------------
 
 resource "google_storage_bucket" "tfstate" {
   name                        = "${var.project_id}-tfstate"
@@ -69,6 +69,11 @@ resource "google_storage_bucket" "tfstate" {
     action {
       type = "Delete"
     }
+  }
+  lifecycle {
+    # It holds this stack's own state: deleting it would lose the record of
+    # everything here. Terraform refuses any plan that would destroy it.
+    prevent_destroy = true
   }
 
   depends_on = [google_project_service.apis]
