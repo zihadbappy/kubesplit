@@ -38,11 +38,17 @@ make monitoring     # kube-prometheus-stack: Prometheus Operator, Prometheus, Gr
 make demo           # build + load the image, helm install, wait until all pods are ready
 kubectl logs -f deployment/kubesplit-server   # watch rounds close
 make prometheus-ui  # http://localhost:9090, try: kubesplit_round or up{job=~"kubesplit-.*"}
+make grafana-ui     # http://localhost:3000, dashboard "KubeSplit"
 make kind-down      # delete the cluster
 ```
 
 The chart's `ServiceMonitor` (enabled in `deploy/kind/values.yaml`) makes Prometheus
 scrape the server and every client pod every 5 s, labelled `component="server"|"client"`.
+Its `grafanaDashboard` ConfigMap is loaded by Grafana's sidecar as the **KubeSplit**
+dashboard: run progress, client compute vs blocked time per batch, traffic by message
+kind, server queueing, and each pod's CPU, throttling and memory against its limits.
+Grafana's `admin` password:
+`kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d`.
 
 Without `make`, run the commands under those targets in the `Makefile`. Server and
 clients stay up after training (`KS_EXIT_ON_DONE=false`) so their metrics remain
@@ -120,6 +126,7 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `kubesplit/baseline.py` | Single-process reference run of both modes |
 | `Dockerfile`, `docker-compose.yml` | One CPU-only image for every role; 1 server + 4 clients |
 | `charts/kubesplit/` | Helm chart; settings in `values.yaml`, validated by `values.schema.json` |
+| `scripts/make_dashboard.py` | Builds the chart's Grafana dashboard (`charts/kubesplit/dashboards/`) |
 | `deploy/kind/` | Local cluster config and laptop-sized chart values |
 
 Each sample crosses the cut as 64×8×8 float32 (16 KiB). Vanilla also returns

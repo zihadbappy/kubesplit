@@ -40,6 +40,11 @@ serviceMonitor:
   enabled: false
   interval: 5s   # rounds can be seconds long; scrape often enough to see them
 
+# The Grafana dashboard, as a ConfigMap for Grafana's sidecar to pick up.
+# It has a Release picker, so with several releases enable it on just one.
+grafanaDashboard:
+  enabled: false
+
 # One client pod per run.clients, named <release>-client-0, -1, ...;
 # the trailing number is the pod's data shard.
 client:

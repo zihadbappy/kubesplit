@@ -46,6 +46,12 @@
         "interval": {"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"}
       }
     },
+    "grafanaDashboard": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"}
+      }
+    },
     "client": {
       "type": "object",
       "properties": {

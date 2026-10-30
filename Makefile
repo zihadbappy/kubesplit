@@ -7,7 +7,7 @@ KUBECTX = kind-$(KIND_CLUSTER)
 KPS_VERSION ?= 92.14.1
 
 .PHONY: install proto test lint fmt baseline baseline-quick local image compose-up compose-both \
-	helm-lint kind-up kind-load monitoring prometheus-ui demo kind-down clean
+	helm-lint dashboard kind-up kind-load monitoring prometheus-ui grafana-ui demo kind-down \n	clean
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -57,6 +57,10 @@ helm-lint:
 	helm lint charts/kubesplit --strict
 	helm lint charts/kubesplit --strict -f deploy/kind/values.yaml
 
+# Rebuild the chart's Grafana dashboard JSON after editing scripts/make_dashboard.py.
+dashboard:
+	$(PY) scripts/make_dashboard.py
+
 # Local Kubernetes: make kind-up && make demo
 kind-up:
 	kind create cluster --config deploy/kind/cluster.yaml --wait 180s
@@ -78,6 +82,11 @@ monitoring:
 prometheus-ui:
 	kubectl --context $(KUBECTX) -n monitoring port-forward \
 		svc/monitoring-kube-prometheus-prometheus 9090:9090
+
+# Grafana at http://localhost:3000, dashboard "KubeSplit" (Ctrl+C to stop).
+# Log in as admin; the password is in the monitoring-grafana secret.
+grafana-ui:
+	kubectl --context $(KUBECTX) -n monitoring port-forward svc/monitoring-grafana 3000:80
 
 # Install (or upgrade) the chart with laptop-sized values; ARGS="--set run.mode=vanilla".
 demo: kind-load

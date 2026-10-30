@@ -1,0 +1,15 @@
+{{- if .Values.grafanaDashboard.enabled }}
+# Grafana's dashboard sidecar (kube-prometheus-stack runs one) loads every
+# ConfigMap with this label, from any namespace, as a dashboard. The JSON is
+# built by scripts/make_dashboard.py.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kubesplit.fullname" . }}-dashboard
+  labels:
+    {{- include "kubesplit.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  kubesplit.json: |-
+{{ .Files.Get "dashboards/kubesplit.json" | indent 4 }}
+{{- end }}

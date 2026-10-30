@@ -8,6 +8,8 @@ run:
 # kube-prometheus-stack runs on kind (deploy/kind/monitoring-values.yaml).
 serviceMonitor:
   enabled: true
+grafanaDashboard:
+  enabled: true
 
 server:
   resources:
