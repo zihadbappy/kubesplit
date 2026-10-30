@@ -2,8 +2,6 @@
 # APIs, the image registry, the state bucket for infra/cluster, and keyless
 # GitHub Actions access (Workload Identity Federation, no JSON keys).
 
-data "google_project" "this" {}
-
 locals {
   apis = [
     "artifactregistry.googleapis.com",
