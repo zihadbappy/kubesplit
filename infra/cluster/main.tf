@@ -47,6 +47,12 @@ resource "google_container_cluster" "this" {
     service_account = google_service_account.nodes.email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
   }
+  lifecycle {
+    # node_config describes only that short-lived default pool. Once it is
+    # gone the cluster reports none, and without this every later plan would
+    # want to rebuild the whole cluster.
+    ignore_changes = [node_config]
+  }
 
   deletion_protection = false # ephemeral by design
   networking_mode     = "VPC_NATIVE"
