@@ -15,6 +15,15 @@ GRPC_OPTIONS = [
     ("grpc.max_send_message_length", 64 * MiB),
     ("grpc.max_receive_message_length", 64 * MiB),
 ]
+# Clients only. After a failed connection gRPC waits 1 s, then 1.6x longer each
+# try (up to 2 min). A replaced server pod takes ~10 s to come up, by which time
+# the wait has grown so much that clients rejoined ~16 s after it was back (on
+# GKE). Retrying at least every 2 s makes them rejoin within a couple of seconds.
+CLIENT_GRPC_OPTIONS = GRPC_OPTIONS + [
+    ("grpc.initial_reconnect_backoff_ms", 500),
+    ("grpc.min_reconnect_backoff_ms", 500),
+    ("grpc.max_reconnect_backoff_ms", 2000),
+]
 # The server holds WaitRound open at most this long; clients allow extra slack.
 LONG_POLL_SECONDS = 20.0
 

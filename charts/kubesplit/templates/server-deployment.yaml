@@ -77,7 +77,7 @@ spec:
           readinessProbe:
             tcpSocket:
               port: grpc
-            periodSeconds: 5
+            periodSeconds: 1  # a replaced server takes traffic as soon as it listens
           resources:
             {{- toYaml .Values.server.resources | nindent 12 }}
           securityContext:

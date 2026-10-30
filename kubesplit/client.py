@@ -24,7 +24,7 @@ from kubesplit import kubesplit_pb2_grpc as pb_grpc
 from kubesplit.data import client_shards, load_dataset
 from kubesplit.metrics import ClientMetrics
 from kubesplit.runtime import (
-    GRPC_OPTIONS,
+    CLIENT_GRPC_OPTIONS,
     LONG_POLL_SECONDS,
     add_common_args,
     device,
@@ -205,7 +205,7 @@ def run_client(
     """
     m = metrics or ClientMetrics()
     trained = 0
-    with grpc.insecure_channel(server, options=GRPC_OPTIONS) as channel:
+    with grpc.insecure_channel(server, options=CLIENT_GRPC_OPTIONS) as channel:
         stub = pb_grpc.SplitLearningStub(channel)
         while True:
             s = _join(stub, server, client_id, shard, data_root, device, connect_timeout)
