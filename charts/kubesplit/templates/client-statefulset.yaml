@@ -31,6 +31,31 @@ spec:
     spec:
       securityContext:
         {{- include "kubesplit.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.run.netDelayMs }}
+      initContainers:
+        # Delays every packet this pod sends by run.netDelayMs. The netem queue
+        # lives in the pod's network namespace, so it outlasts this container
+        # and applies to the client. limit 10000: room to queue our traffic
+        # during the delay, so it never turns into packet loss.
+        - name: net-delay
+          image: {{ include "kubesplit.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["tc", "qdisc", "replace", "dev", "eth0", "root", "netem",
+                    "delay", "{{ .Values.run.netDelayMs }}ms", "limit", "10000"]
+          # tc needs root and NET_ADMIN; only this short-lived container gets them.
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_ADMIN"]
+          # requests == limits here too, or the pod loses Guaranteed QoS.
+          resources:
+            requests: {cpu: 100m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 32Mi}
+      {{- end }}
       containers:
         - name: client
           image: {{ include "kubesplit.image" . }}

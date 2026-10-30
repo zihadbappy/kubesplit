@@ -13,6 +13,10 @@ run:
   dataset: cifar10     # cifar10 | fake (synthetic, nothing to download)
   maxBatches: 0        # per client per round; 0 = whole shard
   runId: ""            # results file name; empty = <mode>-c<clients>-<timestamp>
+  # Extra delay on every packet a client sends (tc netem), so this much more
+  # round-trip time to the server: e.g. 50 for a client on another continent.
+  # 0 = none. Under run so that changing it restarts everything as a new run.
+  netDelayMs: 0
 
 image:
   repository: kubesplit

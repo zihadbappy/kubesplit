@@ -20,7 +20,8 @@
         "lr": {"type": "number", "exclusiveMinimum": 0},
         "dataset": {"enum": ["cifar10", "fake"]},
         "maxBatches": {"type": "integer", "minimum": 0},
-        "runId": {"type": "string"}
+        "runId": {"type": "string"},
+        "netDelayMs": {"type": "integer", "minimum": 0, "maximum": 1000}
       }
     },
     "image": {

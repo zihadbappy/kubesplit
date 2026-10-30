@@ -21,6 +21,10 @@ spec:
       labels:
         {{- include "kubesplit.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: server
+      annotations:
+        # Same hash as the clients': any run.* change (even one only clients
+        # use, like netDelayMs) restarts the server, so it is a new run.
+        checksum/run: {{ .Values.run | toJson | sha256sum }}
     spec:
       securityContext:
         {{- include "kubesplit.podSecurityContext" . | nindent 8 }}

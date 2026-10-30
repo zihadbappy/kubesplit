@@ -13,6 +13,11 @@ WORKDIR /app
 RUN pip install --index-url https://download.pytorch.org/whl/cpu \
     torch==2.11.0 torchvision==0.26.0
 
+# tc (iproute2), for the init container that adds network delay (run.netDelayMs).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml ./
 COPY kubesplit ./kubesplit
 RUN pip install .

@@ -115,6 +115,19 @@ Every flag also reads a `KS_*` environment variable: `KS_MODE`, `KS_CLIENTS`,
 `KS_METRICS_PORT` (default 8000; 0 turns metrics off).
 Torch sizes its thread pool from the container's cgroup CPU quota, not the host core count.
 
+On Kubernetes, `run.netDelayMs` adds network latency between clients and server. Each
+client pod gets an init container that runs `tc qdisc replace dev eth0 root netem delay
+<N>ms` in the pod's network namespace, so every packet the client sends waits N ms: N ms
+more round-trip time to the server. Only that init container runs as root with
+`NET_ADMIN`; the client itself keeps every capability dropped. Changing the value
+restarts server and clients as a new run, like any `run.*` value.
+
+Measured on kind (4 clients, synthetic data) with `run.netDelayMs=50`: a TCP connect
+from a client pod to the server takes 50.3 ms instead of 0.7 ms. Per batch, a vanilla
+client's blocked time rose from 233 to 396 ms: 163 ms more for 50 ms of latency, because
+each `Step` moves ~1 MiB each way and HTTP/2 flow control needs several round trips to
+do it. A decoupled client's blocked time went from 9 to 14 ms.
+
 Results: one CSV per run in `results/`, one row per round: test accuracy, train
 loss and accuracy, `bytes_up` / `bytes_down` / `bytes_sync` (serialized message sizes),
 round time, and the number of clients that reported.
