@@ -9,7 +9,7 @@ KPS_VERSION ?= 92.14.1
 
 .PHONY: install proto test lint fmt baseline baseline-quick local image compose-up compose-both \
 	helm-lint tf-check dashboard kind-up kind-load monitoring prometheus-ui grafana-ui demo \
-	pod-kill kind-down gke-monitoring clean
+	pod-kill demo-gif kind-down gke-monitoring clean
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -120,6 +120,10 @@ demo: kind-load
 # Kill a pod mid-round and time the recovery: make pod-kill TARGET=server ARGS="--at-round 5".
 pod-kill:
 	$(PY) scripts/pod_kill.py $(TARGET) --context $(KUBECTX) $(ARGS)
+
+# Re-record docs/demo.gif and docs/demo.cast on kind (reinstalls the release, ~2 min).
+demo-gif: kind-load
+	$(PY) scripts/record_demo.py --context $(KUBECTX)
 
 kind-down:
 	kind delete cluster --name $(KIND_CLUSTER)

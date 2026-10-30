@@ -10,6 +10,10 @@ N client pods hold the bottom and train on their own CIFAR-10 shard. Two modes:
 After each round the client bottoms are averaged with FedAvg, weighted by sample count.
 A round closes when a quorum of clients has reported or a timeout fires.
 
+![A real session on kind: install a run with 50 ms of added latency, watch rounds close, kill the server; the clients rejoin its replacement with no pod restarts](docs/demo.gif)
+
+*A real session on kind, replayed with pauses shortened ([`scripts/record_demo.py`](scripts/record_demo.py); `docs/demo.cast` plays in asciinema).*
+
 ## Results
 
 Measured on GKE: 3 × `n2-standard-4` Spot VMs, a 2-CPU server and 4 one-CPU clients,
@@ -265,6 +269,7 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `charts/kubesplit/` | Helm chart; settings in `values.yaml`, validated by `values.schema.json` |
 | `scripts/pod_kill.py` | Fault injection: kill a pod mid-round, time the recovery |
 | `scripts/benchmark.py`, `plot_results.py` | Benchmark matrix (fresh install per run) and its charts and tables |
+| `scripts/record_demo.py` | Records the README demo on kind: asciicast plus GIF (`make demo-gif`) |
 | `benchmarks/` | Method, raw CSVs and results from GKE; charts in `docs/img/` |
 | `scripts/make_dashboard.py` | Builds the chart's Grafana dashboard (`charts/kubesplit/dashboards/`) |
 | `deploy/kind/` | Local cluster config and laptop-sized chart values |
