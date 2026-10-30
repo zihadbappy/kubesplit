@@ -1,0 +1,7 @@
+utc,release,mode,clients,target,killed_in_round,normal_round_s,pod_gone,pod_running,server_up,rejoined,round_closed,rounds_lost
+2026-10-30T18:21:39+00:00,kubesplit,decoupled,4,client-2,3,37.9,4.9,4.9,,6.2,36.7,0
+2026-10-30T18:23:41+00:00,kubesplit,decoupled,4,client-1,6,36.0,8.2,8.2,,6.7,38.0,0
+2026-10-30T18:25:42+00:00,kubesplit,decoupled,4,client-3,9,37.3,5.8,5.8,,6.2,41.1,0
+2026-10-30T18:28:00+00:00,kubesplit,decoupled,4,server,12,36.7,8.1,1.6,9.0,24.1,60.8,11
+2026-10-30T18:30:20+00:00,kubesplit,decoupled,4,server,4,35.9,4.6,2.2,8.0,25.4,61.0,3
+2026-10-30T18:32:43+00:00,kubesplit,decoupled,4,server,4,35.0,4.7,4.7,8.2,26.6,62.2,3

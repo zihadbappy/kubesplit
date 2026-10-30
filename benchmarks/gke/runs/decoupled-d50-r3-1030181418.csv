@@ -1,0 +1,6 @@
+mode,clients,round,reporting,close_reason,test_acc,train_loss,train_acc,bytes_up,bytes_down,bytes_sync,round_seconds,elapsed_seconds
+decoupled,4,1,4,quorum,45.8,1.6622,39.57,819647824,0,2858468,54.418,59.974
+decoupled,4,2,4,quorum,58.58,1.2465,54.99,819647824,0,2858468,31.891,97.329
+decoupled,4,3,4,quorum,65.16,1.0443,62.87,819647824,0,2858468,31.892,134.692
+decoupled,4,4,4,quorum,69.86,0.9423,66.82,819647824,0,2858468,31.995,172.035
+decoupled,4,5,4,quorum,70.64,0.878,69.16,819647824,0,2858468,31.844,209.217

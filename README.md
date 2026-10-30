@@ -10,9 +10,70 @@ N client pods hold the bottom and train on their own CIFAR-10 shard. Two modes:
 After each round the client bottoms are averaged with FedAvg, weighted by sample count.
 A round closes when a quorum of clients has reported or a timeout fires.
 
-> Status: Days 1–3 done: baseline, gRPC services, Docker Compose, Helm chart on kind,
-> Prometheus + Grafana, pod-kill recovery, network delay. Day 4 written: Terraform for
-> GCP and GitHub Actions CI/CD (not yet applied to a cloud project). Benchmarks next.
+## Results
+
+Measured on GKE: 3 × `n2-standard-4` Spot VMs, a 2-CPU server and 4 one-CPU clients,
+CIFAR-10 for 5 epochs, 3 runs per configuration. Method and raw data are in
+[benchmarks/](benchmarks/README.md).
+
+- **Latency barely touches decoupled training.** From 0 to 100 ms of added
+  client-server latency, a vanilla round grows from 36.0 s to 50.2 s (+39%) while a
+  decoupled round stays at 31.5–32.0 s. Decoupled rounds are 12% shorter with no
+  added latency, 21% shorter at 50 ms and 36% shorter at 100 ms.
+- **Half the traffic.** A 5-epoch vanilla run moves 7.6 GiB between clients and
+  server: 3.8 GiB of activations up and 3.8 GiB of gradients down. Decoupled sends
+  the activations only.
+- **Same accuracy.** Every configuration averages 68.8–71.9% test accuracy after
+  5 epochs; the gap between modes is within run-to-run noise.
+- **Decoupled is bound by the server, not the network.** Its batches wait ~117 ms
+  for the shared top model: 4 clients × 196 batches × ~40 ms per step is the 32 s
+  round. More server CPU, not a faster network, would speed it up. Vanilla's
+  clients wait less in that queue as latency grows (36 → 9 ms at 50 ms), which is
+  why small delays cost it little at first.
+- **Recovery.** A killed client pod rejoins ~6 s later and its round still closes
+  on schedule (38.6 s after the kill, about one normal round). A killed server is
+  replaced and all clients rejoin its new run in 12.3 s, down from 25.4 s after
+  capping gRPC's reconnect backoff and probing readiness every second; training
+  moves again after 48.7 s (was 61.3 s).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/round-time-vs-latency-dark.png">
+  <img alt="Seconds per round against added latency: vanilla rises from 36 to 50 seconds between 0 and 100 ms, decoupled stays at 32 seconds" src="docs/img/round-time-vs-latency-light.png" width="720">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/batch-time-split-dark.png">
+  <img alt="Client time per batch split into compute and blocked: vanilla's blocked share grows from 87 to 160 ms with latency, decoupled's stays near 55 ms" src="docs/img/batch-time-split-light.png" width="720">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/accuracy-over-time-dark.png">
+  <img alt="Test accuracy against wall-clock minutes at 50 ms latency: both modes reach about 70 percent, decoupled finishes its 5 epochs about 35 seconds sooner" src="docs/img/accuracy-over-time-light.png" width="720">
+</picture>
+
+The full tables are in [benchmarks/gke/results.md](benchmarks/gke/results.md).
+
+## Architecture
+
+```mermaid
+flowchart LR
+  push([git push]) --> ci
+  subgraph gha [GitHub Actions]
+    ci["CI: ruff, pytest, helm lint,<br/>kubeconform, terraform validate"] --> img["build + push image<br/>(CPU torch + CIFAR-10)"]
+    dep["Deploy to GKE<br/>(run by hand)"]
+  end
+  img -- "OIDC token → Workload Identity<br/>Federation, no keys" --> ar[(Artifact Registry)]
+  dep -- "OIDC → WIF → helm upgrade" --> gke
+  subgraph gke [GKE: zonal, 3 × n2-standard-4 Spot]
+    direction TB
+    c["4 client pods<br/>StatefulSet, shard = pod ordinal"] -- "gRPC: activations up,<br/>gradients down (vanilla only)" --> s["server pod<br/>top model, rounds, FedAvg"]
+    prom["Prometheus + Grafana"] -. "scrape /metrics" .-> s
+    prom -.-> c
+  end
+  ar -- pull --> gke
+  tf["Terraform:<br/>bootstrap + cluster"] --> ar
+  tf --> gke
+```
 
 ## Quick start
 
@@ -86,7 +147,8 @@ synthetic data, one ~5 s round as the baseline):
 | rejoined (server: all 4 clients) | 10.5 | 19.0 |
 | a round closes: training moves again | 17.9 | 23.9 (new run, 9 rounds lost) |
 
-No pod restarted in either case: clients rejoin in-process (see below).
+No pod restarted in either case: clients rejoin in-process (see below). Recovery on
+GKE, with real CIFAR-10 rounds, is under [Results](#results).
 
 ## CI/CD and GKE
 
@@ -130,7 +192,10 @@ The server keeps no state on disk, so a replacement server starts a new run from
 round 1. Each server process has a random `server_id`, which Join and WaitRound
 return. When a client sees a different ID, or the server drops a call
 (`UNAVAILABLE`), it joins again in-process instead of crashing, so Kubernetes never
-restarts it. Both roles exit on SIGTERM within about a second.
+restarts it. While the server is down, clients retry the connection at least every
+2 s (gRPC's default backoff grows past the ~10 s a new server pod needs), and the
+server's readiness probe runs every second, so its Service takes traffic as soon
+as it listens. Both roles exit on SIGTERM within about a second.
 Tensors travel as dtype + shape + raw bytes (`kubesplit/tensors.py`), never pickle.
 
 ## Configuration
@@ -199,6 +264,8 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `Dockerfile`, `docker-compose.yml` | One CPU-only image for every role, CIFAR-10 included; 1 server + 4 clients |
 | `charts/kubesplit/` | Helm chart; settings in `values.yaml`, validated by `values.schema.json` |
 | `scripts/pod_kill.py` | Fault injection: kill a pod mid-round, time the recovery |
+| `scripts/benchmark.py`, `plot_results.py` | Benchmark matrix (fresh install per run) and its charts and tables |
+| `benchmarks/` | Method, raw CSVs and results from GKE; charts in `docs/img/` |
 | `scripts/make_dashboard.py` | Builds the chart's Grafana dashboard (`charts/kubesplit/dashboards/`) |
 | `deploy/kind/` | Local cluster config and laptop-sized chart values |
 | `deploy/gke/` | Chart and kube-prometheus-stack values for GKE |

@@ -1,0 +1,6 @@
+mode,clients,round,reporting,close_reason,test_acc,train_loss,train_acc,bytes_up,bytes_down,bytes_sync,round_seconds,elapsed_seconds
+vanilla,4,1,4,quorum,42.88,1.579,42.48,819647824,819223520,635084,59.297,64.762
+vanilla,4,2,4,quorum,61.86,1.1629,58.26,819647824,819223520,635084,37.17,107.317
+vanilla,4,3,4,quorum,66.57,0.98,65.5,819647824,819223520,635084,36.494,149.166
+vanilla,4,4,4,quorum,71.09,0.8859,68.96,819647824,819223520,635084,36.66,191.273
+vanilla,4,5,4,quorum,72.41,0.8194,71.62,819647824,819223520,635084,36.734,233.43
