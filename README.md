@@ -39,6 +39,7 @@ make demo           # build + load the image, helm install, wait until all pods 
 kubectl logs -f deployment/kubesplit-server   # watch rounds close
 make prometheus-ui  # http://localhost:9090, try: kubesplit_round or up{job=~"kubesplit-.*"}
 make grafana-ui     # http://localhost:3000, dashboard "KubeSplit"
+make pod-kill TARGET=server   # kill a pod mid-round and time the recovery
 make kind-down      # delete the cluster
 ```
 
@@ -61,6 +62,24 @@ Without `make`, run the commands under those targets in the `Makefile`. Server a
 clients stay up after training (`KS_EXIT_ON_DONE=false`) so their metrics remain
 scrapeable. A new run starts whenever a `run.*` value changes:
 `helm upgrade kubesplit charts/kubesplit -f deploy/kind/values.yaml --set run.mode=vanilla`.
+
+### Killing pods
+
+`scripts/pod_kill.py` waits until a chosen round is open, deletes the server or one
+client mid-round, and times each stage of recovery. It reads progress from the
+server's `/metrics` through the Kubernetes API, so it needs only kubectl. With
+`--out` it appends a CSV row per run. Measured on kind (decoupled, 4 clients,
+synthetic data, one ~5 s round as the baseline):
+
+| Seconds after the kill | client-2 | server |
+|---|---|---|
+| replacement pod running | 2.6 | 1.9 |
+| old pod gone | 2.0 | 5.2 |
+| replacement server answering | | 12.5 |
+| rejoined (server: all 4 clients) | 10.5 | 19.0 |
+| a round closes: training moves again | 17.9 | 23.9 (new run, 9 rounds lost) |
+
+No pod restarted in either case: clients rejoin in-process (see below).
 
 ## How a round works
 
@@ -140,6 +159,7 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `kubesplit/baseline.py` | Single-process reference run of both modes |
 | `Dockerfile`, `docker-compose.yml` | One CPU-only image for every role; 1 server + 4 clients |
 | `charts/kubesplit/` | Helm chart; settings in `values.yaml`, validated by `values.schema.json` |
+| `scripts/pod_kill.py` | Fault injection: kill a pod mid-round, time the recovery |
 | `scripts/make_dashboard.py` | Builds the chart's Grafana dashboard (`charts/kubesplit/dashboards/`) |
 | `deploy/kind/` | Local cluster config and laptop-sized chart values |
 

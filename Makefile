@@ -2,12 +2,14 @@ PY ?= python
 COMPOSE ?= docker compose
 MODE ?= decoupled
 ARGS ?=
+TARGET ?= client-0
 KIND_CLUSTER ?= kubesplit
 KUBECTX = kind-$(KIND_CLUSTER)
 KPS_VERSION ?= 92.14.1
 
 .PHONY: install proto test lint fmt baseline baseline-quick local image compose-up compose-both \
-	helm-lint dashboard kind-up kind-load monitoring prometheus-ui grafana-ui demo kind-down \n	clean
+	helm-lint dashboard kind-up kind-load monitoring prometheus-ui grafana-ui demo pod-kill \
+	kind-down clean
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -94,6 +96,10 @@ demo: kind-load
 		--kube-context $(KUBECTX) $(ARGS)
 	kubectl --context $(KUBECTX) rollout status deployment/kubesplit-server --timeout=180s
 	kubectl --context $(KUBECTX) rollout status statefulset/kubesplit-client --timeout=180s
+
+# Kill a pod mid-round and time the recovery: make pod-kill TARGET=server ARGS="--at-round 5".
+pod-kill:
+	$(PY) scripts/pod_kill.py $(TARGET) --context $(KUBECTX) $(ARGS)
 
 kind-down:
 	kind delete cluster --name $(KIND_CLUSTER)
