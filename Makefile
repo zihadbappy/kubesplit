@@ -42,7 +42,11 @@ baseline-quick:
 local:
 	$(PY) scripts/local_run.py --mode $(MODE) $(ARGS)
 
-image:
+# The image bakes in CIFAR-10 from data/; download it first if it isn't there.
+data/cifar-10-batches-py:
+	$(PY) -m kubesplit prepare-data --data-root data
+
+image: data/cifar-10-batches-py
 	docker build -t kubesplit:dev .
 
 # One mode through Docker Compose: make compose-up MODE=vanilla

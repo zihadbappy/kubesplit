@@ -18,6 +18,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends iproute2 \
     && rm -rf /var/lib/apt/lists/*
 
+# CIFAR-10 (178 MB), baked in so pods never download it: the canonical host is
+# slow. Taken from the build context, so run `python -m kubesplit prepare-data`
+# first. Loading it here checks every file's MD5: a missing or corrupt copy
+# fails the build, not a pod.
+COPY data/cifar-10-batches-py /data/cifar-10-batches-py
+RUN python -c "from torchvision.datasets import CIFAR10; \
+[CIFAR10('/data', train=t) for t in (True, False)]"
+
 COPY pyproject.toml ./
 COPY kubesplit ./kubesplit
 RUN pip install .

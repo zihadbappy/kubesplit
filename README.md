@@ -10,8 +10,8 @@ N client pods hold the bottom and train on their own CIFAR-10 shard. Two modes:
 After each round the client bottoms are averaged with FedAvg, weighted by sample count.
 A round closes when a quorum of clients has reported or a timeout fires.
 
-> Status: Days 1–2 done (single-process baseline; gRPC services; Docker Compose).
-> Helm, Terraform and CI are coming next.
+> Status: Days 1–3 done: baseline, gRPC services, Docker Compose, Helm chart on kind,
+> Prometheus + Grafana, pod-kill recovery, network delay. Terraform and CI are next.
 
 ## Quick start
 
@@ -22,15 +22,21 @@ make baseline-quick   # both modes in one process, synthetic data
 make baseline         # both modes in one process, real CIFAR-10 -> results/baseline.csv
 make local MODE=vanilla    # server + 4 client processes over gRPC, no Docker
 make compose-both          # server + 4 client containers, vanilla then decoupled
+make image                 # kubesplit:dev, CIFAR-10 included (downloads it first if missing)
 ```
+
+The image carries CIFAR-10 so pods never download it: the build copies
+`data/cifar-10-batches-py` (from `python -m kubesplit prepare-data`) and checks every
+file's MD5, so a missing or corrupt copy fails the build.
 
 Without `make` (e.g. Windows): `python -m kubesplit {server,client,baseline} --help`
 and `python scripts/local_run.py --help`.
 
 ## Run on Kubernetes (kind)
 
-Needs Docker, [kind](https://kind.sigs.k8s.io/), kubectl and Helm. Uses synthetic data,
-so nothing is downloaded; fits a 6-CPU / 7 GiB Docker Desktop.
+Needs Docker, [kind](https://kind.sigs.k8s.io/), kubectl and Helm. Uses synthetic data
+for speed (`--set run.dataset=cifar10` trains on the real images baked into the image);
+fits a 6-CPU / 7 GiB Docker Desktop. With CIFAR-10 a client peaks at ~650 of its 768 MiB.
 
 ```bash
 make kind-up        # one-node cluster in Docker
@@ -170,7 +176,7 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `kubesplit/server.py`, `client.py` | gRPC services |
 | `kubesplit/tensors.py` | Tensor ↔ protobuf without pickle |
 | `kubesplit/baseline.py` | Single-process reference run of both modes |
-| `Dockerfile`, `docker-compose.yml` | One CPU-only image for every role; 1 server + 4 clients |
+| `Dockerfile`, `docker-compose.yml` | One CPU-only image for every role, CIFAR-10 included; 1 server + 4 clients |
 | `charts/kubesplit/` | Helm chart; settings in `values.yaml`, validated by `values.schema.json` |
 | `scripts/pod_kill.py` | Fault injection: kill a pod mid-round, time the recovery |
 | `scripts/make_dashboard.py` | Builds the chart's Grafana dashboard (`charts/kubesplit/dashboards/`) |

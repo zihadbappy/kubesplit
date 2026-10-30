@@ -84,14 +84,11 @@ spec:
             {{- toYaml .Values.client.resources | nindent 12 }}
           securityContext:
             {{- include "kubesplit.containerSecurityContext" . | nindent 12 }}
+          # Nothing at /data: the image's CIFAR-10 copy is there, read-only.
           volumeMounts:
-            - name: data
-              mountPath: /data
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: data
-          emptyDir: {}
         - name: tmp
           emptyDir: {}
       {{- with .Values.client.nodeSelector }}

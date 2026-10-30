@@ -2,7 +2,7 @@
 #   helm install kubesplit charts/kubesplit -f deploy/kind/values.yaml
 # Everything not set here comes from charts/kubesplit/values.yaml.
 run:
-  dataset: fake   # synthetic data: nothing to download
+  dataset: fake   # synthetic, for speed; the image also has CIFAR-10 (run.dataset=cifar10)
   rounds: 10
 
 # kube-prometheus-stack runs on kind (deploy/kind/monitoring-values.yaml).

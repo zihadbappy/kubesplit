@@ -1,7 +1,9 @@
 .git
 .github
 .venv
-data
+# Only the extracted CIFAR-10 files go into the image, not the 163 MB tarball.
+data/*
+!data/cifar-10-batches-py
 results
 tests
 scripts

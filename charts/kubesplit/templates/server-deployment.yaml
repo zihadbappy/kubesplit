@@ -83,16 +83,13 @@ spec:
           securityContext:
             {{- include "kubesplit.containerSecurityContext" . | nindent 12 }}
           # The root filesystem is read-only; these are the only writable paths.
+          # Nothing at /data: the image's CIFAR-10 copy is there, read-only.
           volumeMounts:
-            - name: data
-              mountPath: /data
             - name: results
               mountPath: /results
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: data
-          emptyDir: {}
         - name: results
           emptyDir: {}
         - name: tmp
