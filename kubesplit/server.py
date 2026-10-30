@@ -285,7 +285,11 @@ class Server:
             time.sleep(tick)
 
     def stop(self) -> None:
-        self.grpc.stop(grace=2).wait()
+        stopped = self.grpc.stop(grace=2)  # refuse new RPCs; cancel open ones after 2 s
+        # Long-polls sit in coord.wait() for up to 20 s, and Python waits for
+        # every gRPC worker thread before it exits. Release them now.
+        self.servicer.coord.stop()
+        stopped.wait()
 
     def run_until_done(self, grace: float = 30.0, tick: float = 0.5) -> None:
         self.wait_until_done(grace, tick)
@@ -360,11 +364,12 @@ def main(argv=None) -> int:
     if a.metrics_port:
         log.info("metrics on :%d/metrics", servicer.metrics.serve(a.metrics_port))
     server = Server(servicer, a.port).start()
-    server.wait_until_done(a.done_grace)
-    log.info("training finished; results written to %s", results_path)
-    if a.exit_on_done:
-        server.stop()
-        return 0
-    log.info("staying up for metrics scrapes and late clients (KS_EXIT_ON_DONE=false)")
-    threading.Event().wait()  # until the pod is deleted (SIGTERM)
+    try:
+        server.wait_until_done(a.done_grace)
+        log.info("training finished; results written to %s", results_path)
+        if not a.exit_on_done:
+            log.info("staying up for metrics scrapes and late clients (KS_EXIT_ON_DONE=false)")
+            threading.Event().wait()  # until the pod is deleted (SIGTERM)
+    finally:
+        server.stop()  # on SIGTERM too, so open RPCs end and the process can exit
     return 0

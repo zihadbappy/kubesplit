@@ -54,6 +54,7 @@ class RoundCoordinator:
         self.global_state = initial_state
         self.round = 1
         self.done = False
+        self._stopped = False
         self._opened = clock()
 
     def submit(self, client_id: str, round: int, state: State, num_samples: int) -> bool:
@@ -80,15 +81,25 @@ class RoundCoordinator:
     def wait(self, last_round: int, timeout: float) -> tuple[int, bool, State | None]:
         """Block until a round newer than `last_round` opens or training ends.
 
-        Returns (round, done, global_state); round is 0 if the wait timed out.
+        Returns (round, done, global_state); round is 0 if the wait timed out
+        or the coordinator was stopped.
         """
         with self._cv:
-            self._cv.wait_for(lambda: self.done or self.round > last_round, timeout)
+            self._cv.wait_for(
+                lambda: self.done or self.round > last_round or self._stopped, timeout
+            )
             if self.done:
                 return self.round, True, None
             if self.round > last_round:
                 return self.round, False, self.global_state
             return 0, False, None
+
+    def stop(self) -> None:
+        """Release every blocked wait() now (they return round 0) instead of
+        after their long-poll timeout. Called when the server shuts down."""
+        with self._cv:
+            self._stopped = True
+            self._cv.notify_all()
 
     def _close(self, reason: str) -> None:
         clients = sorted(self._updates)

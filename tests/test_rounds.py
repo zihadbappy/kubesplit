@@ -1,3 +1,5 @@
+import threading
+
 import pytest
 import torch
 
@@ -112,3 +114,14 @@ def test_wait_and_done():
     assert c.done and c.wait(2, timeout=0)[:2] == (2, True)
     assert not c.submit("a", 2, st(1.0), 1)
     assert len(closed) == 2
+
+
+def test_stop_releases_a_blocked_wait():
+    c, _, _ = make()
+    result = []
+    t = threading.Thread(target=lambda: result.append(c.wait(1, timeout=30)))
+    t.start()
+    c.stop()
+    t.join(timeout=5)
+    assert not t.is_alive()
+    assert result == [(0, False, None)]  # "poll again", not "training is done"

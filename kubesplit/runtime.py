@@ -4,6 +4,7 @@ import logging
 import math
 import os
 import re
+import signal
 import socket
 
 import torch
@@ -60,6 +61,22 @@ def cpu_limit() -> int:
     return max(1, n or 1)
 
 
+def _on_sigterm(signum, frame) -> None:
+    logging.getLogger("kubesplit").info("SIGTERM received; shutting down")
+    raise SystemExit(128 + signum)  # 143, the code a SIGTERM kill reports
+
+
+def exit_on_sigterm() -> None:
+    """Turn SIGTERM into SystemExit, so `finally` blocks run and the process exits.
+
+    Kubernetes stops a pod with SIGTERM, then SIGKILL after the grace period
+    (30 s). The kernel ignores signals sent to PID 1 that have no handler, and
+    in a container Python is PID 1, so without this every pod delete waits
+    out the full grace period. Must be called from the main thread.
+    """
+    signal.signal(signal.SIGTERM, _on_sigterm)
+
+
 def setup(log_level: str = "INFO", threads: int = 0) -> None:
     logging.basicConfig(
         level=log_level.upper(),
@@ -67,6 +84,7 @@ def setup(log_level: str = "INFO", threads: int = 0) -> None:
         datefmt="%H:%M:%S",
     )
     torch.set_num_threads(threads or cpu_limit())
+    exit_on_sigterm()
 
 
 def add_common_args(p) -> None:
