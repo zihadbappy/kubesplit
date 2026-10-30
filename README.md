@@ -47,8 +47,15 @@ scrape the server and every client pod every 5 s, labelled `component="server"|"
 Its `grafanaDashboard` ConfigMap is loaded by Grafana's sidecar as the **KubeSplit**
 dashboard: run progress, client compute vs blocked time per batch, traffic by message
 kind, server queueing, and each pod's CPU, throttling and memory against its limits.
-Grafana's `admin` password:
-`kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d`.
+Log in as `admin`; the password is in a secret:
+
+```bash
+kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d
+```
+
+```powershell
+[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((kubectl -n monitoring get secret monitoring-grafana -o jsonpath="{.data.admin-password}")))
+```
 
 Without `make`, run the commands under those targets in the `Makefile`. Server and
 clients stay up after training (`KS_EXIT_ON_DONE=false`) so their metrics remain
