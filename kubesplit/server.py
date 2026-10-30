@@ -11,6 +11,7 @@ import logging
 import os
 import threading
 import time
+import uuid
 from concurrent import futures
 from dataclasses import dataclass
 
@@ -29,6 +30,7 @@ from kubesplit.runtime import (
     add_common_args,
     device,
     env,
+    idle_forever,
     parse_bool,
     setup,
 )
@@ -63,6 +65,7 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         device: str = "cpu",
     ):
         self.cfg = cfg
+        self.server_id = uuid.uuid4().hex[:12]  # new on every start: a restart is a new run
         self.poll_seconds = poll_seconds
         self.device = device
         self.results_path = results_path
@@ -113,15 +116,20 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         if clash and clash != [request.client_id]:
             log.warning("shard %d claimed by %s and %s", request.shard, clash, request.client_id)
         log.info("client %s joined with shard %d", request.client_id, request.shard)
-        return pb.JoinReply(config=self.cfg)
+        return pb.JoinReply(config=self.cfg, server_id=self.server_id)
 
     def WaitRound(self, request, context):
+        if request.client_id not in self.clients:
+            # Joined a previous server, not this one: answer at once, so the
+            # client sees our server_id and joins again instead of waiting
+            # for a round number from the old run.
+            return pb.RoundInfo(round=0, server_id=self.server_id)
         rnd, done, state = self.coord.wait(request.last_round, self.poll_seconds)
         if done:
             with self._lock:
                 self._told_done.add(request.client_id)
-            return pb.RoundInfo(round=rnd, done=True)
-        reply = pb.RoundInfo(round=rnd)
+            return pb.RoundInfo(round=rnd, done=True, server_id=self.server_id)
+        reply = pb.RoundInfo(round=rnd, server_id=self.server_id)
         if state is not None:
             reply.global_state.CopyFrom(self._serialized_state(rnd, state))
             self._count_sync(reply.ByteSize())
@@ -354,8 +362,9 @@ def main(argv=None) -> int:
         device=device(),
     )
     log.info(
-        "run %s: %s, %d clients, %d rounds, quorum %d",
+        "run %s (server id %s): %s, %d clients, %d rounds, quorum %d",
         run_id,
+        servicer.server_id,
         a.mode,
         a.clients,
         a.rounds,
@@ -369,7 +378,7 @@ def main(argv=None) -> int:
         log.info("training finished; results written to %s", results_path)
         if not a.exit_on_done:
             log.info("staying up for metrics scrapes and late clients (KS_EXIT_ON_DONE=false)")
-            threading.Event().wait()  # until the pod is deleted (SIGTERM)
+            idle_forever()  # until the pod is deleted (SIGTERM)
     finally:
         server.stop()  # on SIGTERM too, so open RPCs end and the process can exit
     return 0

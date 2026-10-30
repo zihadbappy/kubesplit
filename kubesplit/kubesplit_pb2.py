@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19kubesplit/kubesplit.proto\x12\x0ckubesplit.v1\"4\n\x06Tensor\x12\r\n\x05\x64type\x18\x01 \x01(\t\x12\r\n\x05shape\x18\x02 \x03(\x03\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c\"A\n\x0bNamedTensor\x12\x0c\n\x04name\x18\x01 \x01(\t\x12$\n\x06tensor\x18\x02 \x01(\x0b\x32\x14.kubesplit.v1.Tensor\"7\n\tStateDict\x12*\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x19.kubesplit.v1.NamedTensor\"\xa4\x01\n\tRunConfig\x12\x0c\n\x04mode\x18\x01 \x01(\t\x12\x13\n\x0bnum_clients\x18\x02 \x01(\x05\x12\x11\n\tpartition\x18\x03 \x01(\t\x12\r\n\x05\x61lpha\x18\x04 \x01(\x01\x12\x0c\n\x04seed\x18\x05 \x01(\x03\x12\x12\n\nbatch_size\x18\x06 \x01(\x05\x12\n\n\x02lr\x18\x07 \x01(\x01\x12\x0f\n\x07\x64\x61taset\x18\x08 \x01(\t\x12\x13\n\x0bmax_batches\x18\t \x01(\x05\"/\n\x0bJoinRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\r\n\x05shard\x18\x02 \x01(\x05\"4\n\tJoinReply\x12\'\n\x06\x63onfig\x18\x01 \x01(\x0b\x32\x17.kubesplit.v1.RunConfig\"5\n\x0cRoundRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x12\n\nlast_round\x18\x02 \x01(\x05\"W\n\tRoundInfo\x12\r\n\x05round\x18\x01 \x01(\x05\x12\x0c\n\x04\x64one\x18\x02 \x01(\x08\x12-\n\x0cglobal_state\x18\x03 \x01(\x0b\x32\x17.kubesplit.v1.StateDict\"\x80\x01\n\x0b\x41\x63tivations\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\r\n\x05round\x18\x02 \x01(\x05\x12)\n\x0b\x61\x63tivations\x18\x03 \x01(\x0b\x32\x14.kubesplit.v1.Tensor\x12$\n\x06labels\x18\x04 \x01(\x0b\x32\x14.kubesplit.v1.Tensor\"N\n\tGradients\x12\"\n\x04grad\x18\x01 \x01(\x0b\x32\x14.kubesplit.v1.Tensor\x12\x0c\n\x04loss\x18\x02 \x01(\x02\x12\x0f\n\x07\x63orrect\x18\x03 \x01(\x05\"T\n\rStreamSummary\x12\x0f\n\x07\x62\x61tches\x18\x01 \x01(\x05\x12\x0f\n\x07samples\x18\x02 \x01(\x03\x12\x10\n\x08loss_sum\x18\x03 \x01(\x01\x12\x0f\n\x07\x63orrect\x18\x04 \x01(\x03\"g\n\x06Update\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\r\n\x05round\x18\x02 \x01(\x05\x12\x13\n\x0bnum_samples\x18\x03 \x01(\x03\x12&\n\x05state\x18\x04 \x01(\x0b\x32\x17.kubesplit.v1.StateDict\"4\n\tUpdateAck\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x15\n\rcurrent_round\x18\x02 \x01(\x05\x32\xd7\x02\n\rSplitLearning\x12:\n\x04Join\x12\x19.kubesplit.v1.JoinRequest\x1a\x17.kubesplit.v1.JoinReply\x12@\n\tWaitRound\x12\x1a.kubesplit.v1.RoundRequest\x1a\x17.kubesplit.v1.RoundInfo\x12:\n\x04Step\x12\x19.kubesplit.v1.Activations\x1a\x17.kubesplit.v1.Gradients\x12M\n\x11StreamActivations\x12\x19.kubesplit.v1.Activations\x1a\x1b.kubesplit.v1.StreamSummary(\x01\x12=\n\x0cSubmitUpdate\x12\x14.kubesplit.v1.Update\x1a\x17.kubesplit.v1.UpdateAckb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19kubesplit/kubesplit.proto\x12\x0ckubesplit.v1\"4\n\x06Tensor\x12\r\n\x05\x64type\x18\x01 \x01(\t\x12\r\n\x05shape\x18\x02 \x03(\x03\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c\"A\n\x0bNamedTensor\x12\x0c\n\x04name\x18\x01 \x01(\t\x12$\n\x06tensor\x18\x02 \x01(\x0b\x32\x14.kubesplit.v1.Tensor\"7\n\tStateDict\x12*\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x19.kubesplit.v1.NamedTensor\"\xa4\x01\n\tRunConfig\x12\x0c\n\x04mode\x18\x01 \x01(\t\x12\x13\n\x0bnum_clients\x18\x02 \x01(\x05\x12\x11\n\tpartition\x18\x03 \x01(\t\x12\r\n\x05\x61lpha\x18\x04 \x01(\x01\x12\x0c\n\x04seed\x18\x05 \x01(\x03\x12\x12\n\nbatch_size\x18\x06 \x01(\x05\x12\n\n\x02lr\x18\x07 \x01(\x01\x12\x0f\n\x07\x64\x61taset\x18\x08 \x01(\t\x12\x13\n\x0bmax_batches\x18\t \x01(\x05\"/\n\x0bJoinRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\r\n\x05shard\x18\x02 \x01(\x05\"G\n\tJoinReply\x12\'\n\x06\x63onfig\x18\x01 \x01(\x0b\x32\x17.kubesplit.v1.RunConfig\x12\x11\n\tserver_id\x18\x02 \x01(\t\"5\n\x0cRoundRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x12\n\nlast_round\x18\x02 \x01(\x05\"j\n\tRoundInfo\x12\r\n\x05round\x18\x01 \x01(\x05\x12\x0c\n\x04\x64one\x18\x02 \x01(\x08\x12-\n\x0cglobal_state\x18\x03 \x01(\x0b\x32\x17.kubesplit.v1.StateDict\x12\x11\n\tserver_id\x18\x04 \x01(\t\"\x80\x01\n\x0b\x41\x63tivations\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\r\n\x05round\x18\x02 \x01(\x05\x12)\n\x0b\x61\x63tivations\x18\x03 \x01(\x0b\x32\x14.kubesplit.v1.Tensor\x12$\n\x06labels\x18\x04 \x01(\x0b\x32\x14.kubesplit.v1.Tensor\"N\n\tGradients\x12\"\n\x04grad\x18\x01 \x01(\x0b\x32\x14.kubesplit.v1.Tensor\x12\x0c\n\x04loss\x18\x02 \x01(\x02\x12\x0f\n\x07\x63orrect\x18\x03 \x01(\x05\"T\n\rStreamSummary\x12\x0f\n\x07\x62\x61tches\x18\x01 \x01(\x05\x12\x0f\n\x07samples\x18\x02 \x01(\x03\x12\x10\n\x08loss_sum\x18\x03 \x01(\x01\x12\x0f\n\x07\x63orrect\x18\x04 \x01(\x03\"g\n\x06Update\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\r\n\x05round\x18\x02 \x01(\x05\x12\x13\n\x0bnum_samples\x18\x03 \x01(\x03\x12&\n\x05state\x18\x04 \x01(\x0b\x32\x17.kubesplit.v1.StateDict\"4\n\tUpdateAck\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x15\n\rcurrent_round\x18\x02 \x01(\x05\x32\xd7\x02\n\rSplitLearning\x12:\n\x04Join\x12\x19.kubesplit.v1.JoinRequest\x1a\x17.kubesplit.v1.JoinReply\x12@\n\tWaitRound\x12\x1a.kubesplit.v1.RoundRequest\x1a\x17.kubesplit.v1.RoundInfo\x12:\n\x04Step\x12\x19.kubesplit.v1.Activations\x1a\x17.kubesplit.v1.Gradients\x12M\n\x11StreamActivations\x12\x19.kubesplit.v1.Activations\x1a\x1b.kubesplit.v1.StreamSummary(\x01\x12=\n\x0cSubmitUpdate\x12\x14.kubesplit.v1.Update\x1a\x17.kubesplit.v1.UpdateAckb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -42,21 +42,21 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_JOINREQUEST']._serialized_start=388
   _globals['_JOINREQUEST']._serialized_end=435
   _globals['_JOINREPLY']._serialized_start=437
-  _globals['_JOINREPLY']._serialized_end=489
-  _globals['_ROUNDREQUEST']._serialized_start=491
-  _globals['_ROUNDREQUEST']._serialized_end=544
-  _globals['_ROUNDINFO']._serialized_start=546
-  _globals['_ROUNDINFO']._serialized_end=633
-  _globals['_ACTIVATIONS']._serialized_start=636
-  _globals['_ACTIVATIONS']._serialized_end=764
-  _globals['_GRADIENTS']._serialized_start=766
-  _globals['_GRADIENTS']._serialized_end=844
-  _globals['_STREAMSUMMARY']._serialized_start=846
-  _globals['_STREAMSUMMARY']._serialized_end=930
-  _globals['_UPDATE']._serialized_start=932
-  _globals['_UPDATE']._serialized_end=1035
-  _globals['_UPDATEACK']._serialized_start=1037
-  _globals['_UPDATEACK']._serialized_end=1089
-  _globals['_SPLITLEARNING']._serialized_start=1092
-  _globals['_SPLITLEARNING']._serialized_end=1435
+  _globals['_JOINREPLY']._serialized_end=508
+  _globals['_ROUNDREQUEST']._serialized_start=510
+  _globals['_ROUNDREQUEST']._serialized_end=563
+  _globals['_ROUNDINFO']._serialized_start=565
+  _globals['_ROUNDINFO']._serialized_end=671
+  _globals['_ACTIVATIONS']._serialized_start=674
+  _globals['_ACTIVATIONS']._serialized_end=802
+  _globals['_GRADIENTS']._serialized_start=804
+  _globals['_GRADIENTS']._serialized_end=882
+  _globals['_STREAMSUMMARY']._serialized_start=884
+  _globals['_STREAMSUMMARY']._serialized_end=968
+  _globals['_UPDATE']._serialized_start=970
+  _globals['_UPDATE']._serialized_end=1073
+  _globals['_UPDATEACK']._serialized_start=1075
+  _globals['_UPDATEACK']._serialized_end=1127
+  _globals['_SPLITLEARNING']._serialized_start=1130
+  _globals['_SPLITLEARNING']._serialized_end=1473
 # @@protoc_insertion_point(module_scope)

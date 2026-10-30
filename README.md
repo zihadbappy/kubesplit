@@ -79,6 +79,13 @@ client                                     server
 The server owns the config, so clients only need `KS_SERVER` and a shard. The
 shard defaults to the hostname's trailing ordinal (`kubesplit-client-3` → 3).
 Late updates for a closed round are discarded; the straggler joins the next round.
+
+**When pods die.** A replacement client pod rejoins and trains the current round.
+The server keeps no state on disk, so a replacement server starts a new run from
+round 1. Each server process has a random `server_id`, which Join and WaitRound
+return. When a client sees a different ID, or the server drops a call
+(`UNAVAILABLE`), it joins again in-process instead of crashing, so Kubernetes never
+restarts it. Both roles exit on SIGTERM within about a second.
 Tensors travel as dtype + shape + raw bytes (`kubesplit/tensors.py`), never pickle.
 
 ## Configuration

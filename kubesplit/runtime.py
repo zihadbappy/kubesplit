@@ -6,6 +6,7 @@ import os
 import re
 import signal
 import socket
+import time
 
 import torch
 
@@ -75,6 +76,19 @@ def exit_on_sigterm() -> None:
     out the full grace period. Must be called from the main thread.
     """
     signal.signal(signal.SIGTERM, _on_sigterm)
+
+
+def idle_forever() -> None:
+    """Block until SIGTERM ends the process (pods that stay up after training).
+
+    Sleeps in short slices instead of an untimed wait. Python runs signal
+    handlers in the main thread between bytecodes, and as a container's PID 1
+    with gRPC threads running, SIGTERM never woke threading.Event().wait():
+    the pod was SIGKILLed after the 30 s grace period (measured). Returning to
+    Python every 0.5 s lets the handler run; the same test exits in ~1 s.
+    """
+    while True:
+        time.sleep(0.5)
 
 
 def setup(log_level: str = "INFO", threads: int = 0) -> None:

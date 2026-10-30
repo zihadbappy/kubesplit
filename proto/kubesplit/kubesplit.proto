@@ -43,6 +43,9 @@ message JoinRequest {
 
 message JoinReply {
   RunConfig config = 1;
+  // Random per server process. A restarted server is a new run with a new
+  // ID, which tells clients to join again.
+  string server_id = 2;
 }
 
 message RoundRequest {
@@ -54,6 +57,7 @@ message RoundInfo {
   int32 round = 1;       // 0 = no new round yet, ask again
   bool done = 2;         // training finished; client should exit
   StateDict global_state = 3;
+  string server_id = 4;  // differs from JoinReply's: the server restarted, join again
 }
 
 message Activations {

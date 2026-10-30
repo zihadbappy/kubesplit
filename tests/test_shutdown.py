@@ -43,9 +43,9 @@ def test_server_exits_promptly_on_sigterm_with_a_long_poll_open(tmp_path):
 
         # A client waiting for round 2 holds a server thread in the 20 s long-poll.
         with grpc.insecure_channel(f"localhost:{port}") as channel:
-            poll = pb_grpc.SplitLearningStub(channel).WaitRound.future(
-                pb.RoundRequest(client_id="t", last_round=1), timeout=30
-            )
+            stub = pb_grpc.SplitLearningStub(channel)
+            stub.Join(pb.JoinRequest(client_id="t", shard=0), timeout=10)  # else no long-poll
+            poll = stub.WaitRound.future(pb.RoundRequest(client_id="t", last_round=1), timeout=30)
             time.sleep(1)  # let the call reach the server
             t0 = time.monotonic()
             proc.send_signal(signal.SIGTERM)

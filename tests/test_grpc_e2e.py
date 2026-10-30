@@ -2,6 +2,7 @@
 
 import csv
 import threading
+import time
 
 import grpc
 import pytest
@@ -27,6 +28,7 @@ def start_server():
         round_timeout=60.0,
         results_path=None,
         exit_on_done=True,
+        port=0,
     ):
         cfg = pb.RunConfig(
             mode=mode,
@@ -48,7 +50,7 @@ def start_server():
             results_path=results_path,
             poll_seconds=1.0,
         )
-        server = Server(servicer, port=0).start()
+        server = Server(servicer, port=port).start()
         loop = server.run_until_done if exit_on_done else server.wait_until_done
         t = threading.Thread(target=loop, kwargs={"grace": 5, "tick": 0.05}, daemon=True)
         t.start()
@@ -155,6 +157,43 @@ def test_server_that_stays_up_tells_a_restarted_client_it_is_done(start_server):
     assert not loop.is_alive() and servicer.coord.done
     assert run_clients(server.port, [0]) == {0: 0}  # rejoins, told done, trains nothing
     assert len(servicer.rows) == 2
+
+
+@pytest.mark.parametrize("mode", ["vanilla", "decoupled"])
+def test_clients_join_a_restarted_server_and_finish_its_run(start_server, mode):
+    # A deleted server pod comes back at the same address as a new server: a new run.
+    first, old, _ = start_server(mode, clients=2, rounds=50)
+    result = {}
+    clients = threading.Thread(target=lambda: result.update(run_clients(old.port, [0, 1])))
+    clients.start()
+    deadline = time.monotonic() + 60
+    while first.coord.round < 3 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert first.coord.round >= 3, "first run never got going"
+    old.stop()  # what SIGTERM does
+
+    second, _, loop = start_server(mode, clients=2, rounds=2, port=old.port)
+    assert second.server_id != first.server_id
+    clients.join(timeout=120)
+    assert not clients.is_alive(), "clients should finish the new run, not hang"
+    loop.join(timeout=30)
+    assert second.coord.done
+    assert [r["reporting"] for r in second.rows] == [2, 2]  # both clients came back
+    assert all(n >= 2 + 2 for n in result.values())  # rounds in the old run + the new one
+
+
+def test_wait_round_answers_a_client_that_never_joined_at_once(start_server):
+    # A client from a previous server's run must learn the new server_id right
+    # away, not sit in a long-poll for a round number from the old run.
+    servicer, server, _ = start_server("decoupled", clients=2)
+    with grpc.insecure_channel(f"localhost:{server.port}") as ch:
+        stub = pb_grpc.SplitLearningStub(ch)
+        joined = stub.Join(pb.JoinRequest(client_id="known", shard=0), timeout=10)
+        assert joined.server_id == servicer.server_id
+        t0 = time.monotonic()
+        info = stub.WaitRound(pb.RoundRequest(client_id="stranger", last_round=7), timeout=10)
+        assert time.monotonic() - t0 < 0.5  # a joined client would wait poll_seconds (1 s)
+        assert info.round == 0 and info.server_id == servicer.server_id
 
 
 def test_quorum_lets_rounds_close_without_a_missing_client(start_server):

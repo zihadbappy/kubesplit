@@ -61,10 +61,12 @@ class JoinRequest(_message.Message):
     def __init__(self, client_id: _Optional[str] = ..., shard: _Optional[int] = ...) -> None: ...
 
 class JoinReply(_message.Message):
-    __slots__ = ("config",)
+    __slots__ = ("config", "server_id")
     CONFIG_FIELD_NUMBER: _ClassVar[int]
+    SERVER_ID_FIELD_NUMBER: _ClassVar[int]
     config: RunConfig
-    def __init__(self, config: _Optional[_Union[RunConfig, _Mapping]] = ...) -> None: ...
+    server_id: str
+    def __init__(self, config: _Optional[_Union[RunConfig, _Mapping]] = ..., server_id: _Optional[str] = ...) -> None: ...
 
 class RoundRequest(_message.Message):
     __slots__ = ("client_id", "last_round")
@@ -75,14 +77,16 @@ class RoundRequest(_message.Message):
     def __init__(self, client_id: _Optional[str] = ..., last_round: _Optional[int] = ...) -> None: ...
 
 class RoundInfo(_message.Message):
-    __slots__ = ("round", "done", "global_state")
+    __slots__ = ("round", "done", "global_state", "server_id")
     ROUND_FIELD_NUMBER: _ClassVar[int]
     DONE_FIELD_NUMBER: _ClassVar[int]
     GLOBAL_STATE_FIELD_NUMBER: _ClassVar[int]
+    SERVER_ID_FIELD_NUMBER: _ClassVar[int]
     round: int
     done: bool
     global_state: StateDict
-    def __init__(self, round: _Optional[int] = ..., done: _Optional[bool] = ..., global_state: _Optional[_Union[StateDict, _Mapping]] = ...) -> None: ...
+    server_id: str
+    def __init__(self, round: _Optional[int] = ..., done: _Optional[bool] = ..., global_state: _Optional[_Union[StateDict, _Mapping]] = ..., server_id: _Optional[str] = ...) -> None: ...
 
 class Activations(_message.Message):
     __slots__ = ("client_id", "round", "activations", "labels")
