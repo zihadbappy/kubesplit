@@ -8,8 +8,8 @@ KUBECTX = kind-$(KIND_CLUSTER)
 KPS_VERSION ?= 92.14.1
 
 .PHONY: install proto test lint fmt baseline baseline-quick local image compose-up compose-both \
-	helm-lint dashboard kind-up kind-load monitoring prometheus-ui grafana-ui demo pod-kill \
-	kind-down clean
+	helm-lint tf-check dashboard kind-up kind-load monitoring prometheus-ui grafana-ui demo \
+	pod-kill kind-down clean
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -62,6 +62,14 @@ compose-both:
 helm-lint:
 	helm lint charts/kubesplit --strict
 	helm lint charts/kubesplit --strict -f deploy/kind/values.yaml
+
+# Terraform format + validate for every stack; no credentials or backend needed.
+TF_STACKS = $(wildcard infra/*/versions.tf)
+tf-check:
+	terraform fmt -check -recursive infra
+	for f in $(TF_STACKS); do d=$$(dirname $$f); \
+		terraform -chdir=$$d init -backend=false -input=false >/dev/null && \
+		terraform -chdir=$$d validate || exit 1; done
 
 # Rebuild the chart's Grafana dashboard JSON after editing scripts/make_dashboard.py.
 dashboard:

@@ -11,3 +11,5 @@ results/*
 !results/.gitkeep
 .terraform/
 *.tfstate*
+*.tfvars
+!*.tfvars.example

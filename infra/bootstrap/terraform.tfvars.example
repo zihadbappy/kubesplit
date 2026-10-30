@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+project_id        = "my-gcp-project"
+github_repository = "my-github-user/kubesplit"
+# region          = "us-central1"
