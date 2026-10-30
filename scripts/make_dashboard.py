@@ -14,9 +14,14 @@ S = 'namespace="$namespace", job="$release-server"'
 C = 'namespace="$namespace", job="$release-client"'
 POD = 'namespace="$namespace", pod=~"$release-(server-.+|client-[0-9]+)"'
 CTR = POD + ', container!=""'
-# Categorical slots 1-3, dark steps (validated). "Work" is always blue, "waiting" orange.
-BLUE, ORANGE, AQUA = "#3987e5", "#d95926", "#199e70"
-GRAY = "#8e8e8e"
+# Categorical palette, dark steps, in fixed order (validated for colour-blind separation).
+# "Work" is always blue and "waiting" orange.
+SLOTS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
+BLUE, ORANGE, AQUA = SLOTS[:3]
+GRAY = "#8e8e8e"  # reference lines (limits)
+SERVER = "#c3c2b7"  # neutral, so the server never takes a client's colour
+# Accuracy and loss read 0 until the first round is evaluated; hide that.
+EVALUATED = f"(sum(kubesplit_rounds_total{{{S}}}) > 0)"
 
 OUT = pathlib.Path(__file__).parent.parent / "charts/kubesplit/dashboards/kubesplit.json"
 panels = []
@@ -30,11 +35,28 @@ def target(expr, legend="", ref="A"):
     return {"refId": ref, "datasource": DS, "expr": expr, "legendFormat": legend or "__auto"}
 
 
+def pod_target(expr):
+    """One line per client-N and one for the server, named that way.
+
+    Pods are merged by short name, so a restarted server pod (new random suffix)
+    continues the "server" line instead of adding a legend entry per restart.
+    """
+    short = '".*-(server|client-[0-9]+)(-.*)?"'
+    return target(
+        f'max by (name) (label_replace({expr}, "name", "$1", "pod", {short}))', "{{name}}"
+    )
+
+
 def color(name, hex_):
     return {
         "matcher": {"id": "byName", "options": name},
         "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": hex_}}],
     }
+
+
+def pod_colors():
+    """Client N always gets slot N; every server pod (across restarts) the same neutral."""
+    return [color(f"client-{i}", c) for i, c in enumerate(SLOTS)] + [color("server", SERVER)]
 
 
 def row(title, y):
@@ -91,7 +113,7 @@ def series(
     unit,
     stacked=False,
     step=False,
-    by_name=False,
+    per_pod=False,
     overrides=(),
     soft_max=None,
     limit_line=None,
@@ -114,8 +136,10 @@ def series(
         "unit": unit,
         "min": 0,
         "custom": custom,
-        "color": {"mode": "palette-classic-by-name" if by_name else "palette-classic"},
+        "color": {"mode": "palette-classic"},
     }
+    if per_pod:
+        overrides = [*overrides, *pod_colors()]
     if soft_max is not None:
         custom["axisSoftMax"] = soft_max
     if limit_line is not None:  # a dashed reference line, e.g. 100% of the pod's limit
@@ -167,21 +191,21 @@ stat(
     ],
 )
 stat(
-    "Clients joined",
+    "Clients",
     "Distinct clients that have joined this run.",
     f"max(kubesplit_clients_joined{{{S}}})",
     pos(6, y, 3, 4),
 )
 stat(
-    "Test accuracy",
+    "Accuracy",
     "Global model on the test set after the last closed round.",
-    f"max(kubesplit_test_accuracy_ratio{{{S}}})",
+    f"max(kubesplit_test_accuracy_ratio{{{S}}}) and {EVALUATED}",
     pos(9, y, 3, 4),
     unit="percentunit",
     decimals=1,
 )
 stat(
-    "Avg round time",
+    "Avg round",
     "Mean time from a round opening to closing, over this run.",
     f"sum(kubesplit_round_duration_seconds_sum{{{S}}}) / "
     f"(sum(kubesplit_round_duration_seconds_count{{{S}}}) > 0)",
@@ -190,7 +214,7 @@ stat(
     decimals=1,
 )
 stat(
-    "Timed-out rounds",
+    "Timeouts",
     "Rounds closed by the timeout instead of a full quorum.",
     f'sum(kubesplit_rounds_total{{{S}, reason="timeout"}})',
     pos(15, y, 3, 4),
@@ -202,7 +226,7 @@ stat(
     pos(18, y, 3, 4),
 )
 stat(
-    "Client rejoins",
+    "Rejoins",
     "Joins beyond each client's first: a client pod restarted mid-run.",
     f"sum(kubesplit_client_joins_total{{{S}}}) - sum(kubesplit_clients_joined{{{S}}})",
     pos(21, y, 3, 4),
@@ -214,7 +238,7 @@ y = 6
 series(
     "Test accuracy",
     "Global model on the test set, updated when each round closes.",
-    [target(f"max(kubesplit_test_accuracy_ratio{{{S}}})", "test accuracy")],
+    [target(f"max(kubesplit_test_accuracy_ratio{{{S}}}) and {EVALUATED}", "test accuracy")],
     pos(0, y, 12, 7),
     "percentunit",
     step=True,
@@ -224,7 +248,7 @@ series(
 series(
     "Training loss",
     "Server-side loss over the last closed round.",
-    [target(f"max(kubesplit_train_loss{{{S}}})", "train loss")],
+    [target(f"max(kubesplit_train_loss{{{S}}}) and {EVALUATED}", "train loss")],
     pos(12, y, 12, 7),
     "none",
     step=True,
@@ -256,14 +280,13 @@ series(
     "Client throughput",
     "Training samples per second, per client pod.",
     [
-        target(
+        pod_target(
             f"sum by (pod) (rate(kubesplit_client_samples_total{{{C}}}[$__rate_interval]))",
-            "{{pod}}",
         )
     ],
     pos(8, y, 8, 8),
     "suffix: samples/s",
-    by_name=True,
+    per_pod=True,
 )
 panels.append(
     {
@@ -275,11 +298,10 @@ panels.append(
         "datasource": DS,
         "gridPos": pos(16, y, 8, 8),
         "targets": [
-            target(
+            pod_target(
                 f"sum by (pod) (kubesplit_client_idle_seconds_sum{{{C}}}) / "
                 f"((sum by (pod) (kubesplit_client_idle_seconds_sum{{{C}}}) + "
                 f"sum by (pod) (kubesplit_client_round_seconds_sum{{{C}}})) > 0)",
-                "{{pod}}",
             )
         ],
         "fieldConfig": {
@@ -379,16 +401,15 @@ series(
     "CPU used",
     "Share of each pod's CPU limit in use. The dashed line is the limit.",
     [
-        target(
+        pod_target(
             f"sum by (pod) (rate(container_cpu_usage_seconds_total{{{CTR}}}"
             f"[$__rate_interval])) / sum by (pod) (kube_pod_container_resource_limits"
             f'{{{POD}, resource="cpu"}})',
-            "{{pod}}",
         )
     ],
     pos(0, y, 8, 8),
     "percentunit",
-    by_name=True,
+    per_pod=True,
     soft_max=1,
     limit_line=1,
     interval=KUBELET_STEP,
@@ -398,16 +419,15 @@ series(
     "Share of CFS periods in which the pod hit its CPU limit and was paused. Sustained "
     "throttling means the limit, not the code, sets the speed.",
     [
-        target(
+        pod_target(
             f"sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{{{CTR}}}"
             f"[$__rate_interval])) / (sum by (pod) (rate(container_cpu_cfs_periods_total"
             f"{{{CTR}}}[$__rate_interval])) > 0)",
-            "{{pod}}",
         )
     ],
     pos(8, y, 8, 8),
     "percentunit",
-    by_name=True,
+    per_pod=True,
     soft_max=1,
     interval=KUBELET_STEP,
 )
@@ -415,15 +435,14 @@ series(
     "Memory used",
     "Working set as a share of each pod's memory limit. At 100% the pod is OOM-killed.",
     [
-        target(
+        pod_target(
             f"sum by (pod) (container_memory_working_set_bytes{{{CTR}}}) / sum by (pod) "
             f'(kube_pod_container_resource_limits{{{POD}, resource="memory"}})',
-            "{{pod}}",
         )
     ],
     pos(16, y, 8, 8),
     "percentunit",
-    by_name=True,
+    per_pod=True,
     soft_max=1,
     limit_line=1,
     interval=KUBELET_STEP,
