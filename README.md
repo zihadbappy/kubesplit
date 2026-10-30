@@ -11,7 +11,8 @@ After each round the client bottoms are averaged with FedAvg, weighted by sample
 A round closes when a quorum of clients has reported or a timeout fires.
 
 > Status: Days 1–3 done: baseline, gRPC services, Docker Compose, Helm chart on kind,
-> Prometheus + Grafana, pod-kill recovery, network delay. Terraform and CI are next.
+> Prometheus + Grafana, pod-kill recovery, network delay. Day 4 written: Terraform for
+> GCP and GitHub Actions CI/CD (not yet applied to a cloud project). Benchmarks next.
 
 ## Quick start
 
@@ -86,6 +87,25 @@ synthetic data, one ~5 s round as the baseline):
 | a round closes: training moves again | 17.9 | 23.9 (new run, 9 rounds lost) |
 
 No pod restarted in either case: clients rejoin in-process (see below).
+
+## CI/CD and GKE
+
+| Workflow | When | What |
+|---|---|---|
+| `ci.yml` | every push and pull request | ruff; generated code matches its sources; pytest; `helm lint` + kubeconform; `terraform fmt`/`validate` |
+| `ci.yml`, job `image` | push to `main`, once wired to GCP | build the image (CIFAR-10 included) and push `<sha>` and `main` tags to Artifact Registry |
+| `deploy.yml` | by hand (Actions tab) | `helm upgrade --install` on GKE with the chosen mode, clients, rounds and network delay |
+
+No GCP key exists anywhere: GitHub signs a short-lived OIDC token for each run,
+and Workload Identity Federation exchanges it for credentials of a service
+account that can push to one image repository and deploy into clusters, but
+only for tokens from this repository. The infrastructure is two Terraform
+stacks, a long-lived `bootstrap` and an ephemeral benchmark `cluster` (a zonal GKE
+cluster on Spot VMs); see [infra/README.md](infra/README.md).
+
+Setting it up, once: apply `infra/bootstrap`, set the repository variables it
+prints, apply `infra/cluster`, run `make gke-monitoring`, then run **Deploy to
+GKE** from the Actions tab. `terraform destroy` in `infra/cluster` when done.
 
 ## How a round works
 
@@ -181,6 +201,9 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `scripts/pod_kill.py` | Fault injection: kill a pod mid-round, time the recovery |
 | `scripts/make_dashboard.py` | Builds the chart's Grafana dashboard (`charts/kubesplit/dashboards/`) |
 | `deploy/kind/` | Local cluster config and laptop-sized chart values |
+| `deploy/gke/` | Chart and kube-prometheus-stack values for GKE |
+| `infra/bootstrap/`, `infra/cluster/` | Terraform: registry, state, keyless CI; the GKE cluster |
+| `.github/workflows/` | CI (checks, image push) and the manual GKE deploy |
 
 Each sample crosses the cut as 64×8×8 float32 (16 KiB). Vanilla also returns
 a gradient of the same size, so it moves about 2× the bytes of decoupled mode.

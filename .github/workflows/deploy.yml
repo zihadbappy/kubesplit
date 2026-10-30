@@ -1,0 +1,104 @@
+name: Deploy to GKE
+
+# Manual only: Actions tab -> "Deploy to GKE" -> Run workflow. Installs or
+# upgrades the Helm release on the cluster from infra/cluster with an image CI
+# pushed. One set of inputs is one training run; changing any run setting
+# restarts the server and clients as a new run.
+#
+# Needs, once: the GCP and GKE repository variables (infra/README.md) and
+# kube-prometheus-stack on the cluster (make gke-monitoring), whose
+# ServiceMonitor type the chart uses.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag (a commit SHA CI pushed). Empty = this commit.
+        type: string
+        default: ""
+      mode:
+        type: choice
+        options: [decoupled, vanilla]
+        default: decoupled
+      clients:
+        type: number
+        default: 4
+      rounds:
+        type: number
+        default: 5
+      net_delay_ms:
+        description: Extra client-to-server latency in ms (tc netem); 0 = none
+        type: number
+        default: 0
+      dataset:
+        type: choice
+        options: [cifar10, fake]
+        default: cifar10
+      run_id:
+        description: Results file name; empty = <mode>-c<clients>-<timestamp>
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-gke
+  cancel-in-progress: false # never cut a helm upgrade off halfway
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Add required reviewers to this environment in the repo settings to gate deploys.
+    environment: gke
+    permissions:
+      contents: read
+      id-token: write # the OIDC token Workload Identity Federation trades for GCP credentials
+    steps:
+      - name: Repository is wired to GCP
+        if: vars.GKE_CLUSTER == '' || vars.GCP_WIF_PROVIDER == ''
+        run: |
+          echo "::error::Set the GCP and GKE repository variables first; see infra/README.md."
+          exit 1
+      - uses: actions/checkout@v7
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GKE_LOCATION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.3.1
+      - name: helm upgrade --install
+        # Inputs reach the shell as environment variables, never pasted into
+        # the script, so a crafted input can't inject commands. The chart's
+        # values.schema.json rejects bad values before anything is applied.
+        env:
+          IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+          IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+          MODE: ${{ inputs.mode }}
+          CLIENTS: ${{ inputs.clients }}
+          ROUNDS: ${{ inputs.rounds }}
+          NET_DELAY_MS: ${{ inputs.net_delay_ms }}
+          DATASET: ${{ inputs.dataset }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          helm upgrade --install kubesplit charts/kubesplit -f deploy/gke/values.yaml \
+            --set-string image.repository="$IMAGE_REPOSITORY" \
+            --set-string image.tag="$IMAGE_TAG" \
+            --set-string run.mode="$MODE" \
+            --set run.clients="$CLIENTS" \
+            --set run.rounds="$ROUNDS" \
+            --set run.netDelayMs="$NET_DELAY_MS" \
+            --set-string run.dataset="$DATASET" \
+            --set-string run.runId="$RUN_ID" \
+            --wait --timeout 15m
+      - name: What is running
+        if: always()
+        run: |
+          kubectl get pods -l app.kubernetes.io/instance=kubesplit -o wide
+          helm history kubesplit --max 3
