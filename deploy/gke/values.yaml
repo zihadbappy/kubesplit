@@ -1,0 +1,21 @@
+# GKE overrides (infra/cluster: 3 x n2-standard-4). Sizing comes from the
+# chart defaults: server 2 CPU, each client 1 CPU, requests == limits.
+#   The deploy workflow (.github/workflows/deploy.yml) installs it with:
+#   helm upgrade --install kubesplit charts/kubesplit -f deploy/gke/values.yaml \
+#     --set image.repository=$IMAGE_REPOSITORY --set image.tag=<commit sha> ...
+run:
+  dataset: cifar10   # baked into the image
+
+image:
+  # Required: <region>-docker.pkg.dev/<project>/kubesplit/kubesplit. Left
+  # empty so a deploy that forgets it fails schema validation, instead of
+  # pulling a "kubesplit" image that doesn't exist.
+  repository: ""
+  tag: ""            # a commit SHA; CI pushes one per commit on main
+  pullPolicy: IfNotPresent
+
+# kube-prometheus-stack runs on the cluster too (deploy/gke/monitoring-values.yaml).
+serviceMonitor:
+  enabled: true
+grafanaDashboard:
+  enabled: true

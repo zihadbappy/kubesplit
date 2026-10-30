@@ -1,0 +1,36 @@
+# kube-prometheus-stack on GKE, installed once per cluster by a cluster admin
+# (it creates CRDs and cluster roles, which the CI service account may not):
+#   make gke-monitoring
+# Same trimming as deploy/kind/monitoring-values.yaml.
+
+# Alert routing isn't needed for benchmarks.
+alertmanager:
+  enabled: false
+
+# GKE manages the control plane: etcd, the controller manager and the
+# scheduler aren't reachable from inside the cluster, and kube-proxy binds
+# its metrics to localhost. Their targets would sit at "down".
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+defaultRules:
+  create: false
+
+prometheus:
+  prometheusSpec:
+    # Read ServiceMonitors from every release, so the kubesplit chart's is found.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    retention: 7d
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        memory: 2Gi

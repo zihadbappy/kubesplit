@@ -9,7 +9,7 @@ KPS_VERSION ?= 92.14.1
 
 .PHONY: install proto test lint fmt baseline baseline-quick local image compose-up compose-both \
 	helm-lint tf-check dashboard kind-up kind-load monitoring prometheus-ui grafana-ui demo \
-	pod-kill kind-down clean
+	pod-kill kind-down gke-monitoring clean
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -91,6 +91,14 @@ monitoring:
 	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
 		--version $(KPS_VERSION) -n monitoring --create-namespace \
 		-f deploy/kind/monitoring-values.yaml --kube-context $(KUBECTX) --wait --timeout 15m
+
+# Same stack on GKE, into the current kubectl context (after terraform's get_credentials).
+gke-monitoring:
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts \
+		--force-update
+	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+		--version $(KPS_VERSION) -n monitoring --create-namespace \
+		-f deploy/gke/monitoring-values.yaml --wait --timeout 15m
 
 # Prometheus UI at http://localhost:9090 (Ctrl+C to stop).
 prometheus-ui:
