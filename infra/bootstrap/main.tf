@@ -1,6 +1,7 @@
 # Long-lived pieces, applied once by a human with their own gcloud credentials:
-# APIs, the image registry, the state bucket for infra/cluster, and keyless
-# GitHub Actions access (Workload Identity Federation, no JSON keys).
+# APIs, the image registry, the state bucket for infra/cluster, a bucket for
+# the dataset the image bakes in, and keyless GitHub Actions access (Workload
+# Identity Federation, no JSON keys).
 
 locals {
   apis = [
@@ -79,6 +80,19 @@ resource "google_storage_bucket" "tfstate" {
   depends_on = [google_project_service.apis]
 }
 
+# -- Datasets the image bakes in --------------------------------------------
+
+# CIFAR-10's canonical host can crawl at ~100 KB/s (a 25-minute download), so
+# CI copies it from here instead. A human uploads it once (infra/README.md).
+resource "google_storage_bucket" "data" {
+  name                        = "${var.project_id}-data"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+
+  depends_on = [google_project_service.apis]
+}
+
 # -- CI identity: GitHub Actions -> service account, no keys ----------------
 
 resource "google_service_account" "ci" {
@@ -126,6 +140,13 @@ resource "google_artifact_registry_repository_iam_member" "ci_push" {
   location   = google_artifact_registry_repository.images.location
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${google_service_account.ci.email}"
+}
+
+# Read the datasets for the image build; never write them.
+resource "google_storage_bucket_iam_member" "ci_read_data" {
+  bucket = google_storage_bucket.data.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.ci.email}"
 }
 
 # Deploy workloads with Helm: objects inside clusters, not the clusters

@@ -162,7 +162,7 @@ GKE, with real CIFAR-10 rounds, is under [Results](#results).
 | Workflow | When | What |
 |---|---|---|
 | `ci.yml` | every push and pull request | ruff; generated code matches its sources; pytest; `helm lint` + kubeconform; `terraform fmt`/`validate` |
-| `ci.yml`, job `image` | push to `main`, once wired to GCP | build the image (CIFAR-10 included) and push `<sha>` and `main` tags to Artifact Registry |
+| `ci.yml`, job `image` | push to `main`, once wired to GCP | build the image (CIFAR-10 copied from a private bucket, MD5-checked) and push `<sha>` and `main` tags to Artifact Registry |
 | `deploy.yml` | by hand (Actions tab) | `helm upgrade --install` on GKE with the chosen mode, clients, rounds and network delay |
 
 No GCP key exists anywhere: GitHub signs a short-lived OIDC token for each run,

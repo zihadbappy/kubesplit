@@ -8,6 +8,11 @@ output "state_bucket" {
   value       = google_storage_bucket.tfstate.name
 }
 
+output "data_bucket" {
+  description = "CI copies CIFAR-10 for the image from here; upload it once (infra/README.md)."
+  value       = google_storage_bucket.data.name
+}
+
 output "workload_identity_provider" {
   description = "Full provider name for google-github-actions/auth."
   value       = google_iam_workload_identity_pool_provider.github.name

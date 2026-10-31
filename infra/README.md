@@ -4,7 +4,7 @@ Two Terraform stacks with different lifetimes:
 
 | Stack | Lifetime | Creates | State |
 |---|---|---|---|
-| `bootstrap/` | once per project | APIs, Artifact Registry, state bucket, GitHub OIDC trust, CI service account | the bucket it creates, `bootstrap/` |
+| `bootstrap/` | once per project | APIs, Artifact Registry, state and data buckets, GitHub OIDC trust, CI service account | the bucket it creates, `bootstrap/` |
 | `cluster/` | per benchmark session | zonal GKE cluster, Spot node pool, node service account | the same bucket, `cluster/` |
 
 Both states sit in one versioned, never-public bucket, so neither lives only on
@@ -17,8 +17,9 @@ GitHub Actions never holds a GCP key. Each workflow run gets a short-lived
 OIDC token from GitHub; Google's Security Token Service trades it for GCP
 credentials through a Workload Identity pool, but only if the token says it
 came from this repository (`attribute_condition`). The workflow then acts as
-the `kubesplit-ci` service account, which can push to the one image repository
-and deploy into clusters (`roles/container.developer`), nothing more.
+the `kubesplit-ci` service account, which can push to the one image repository,
+read the data bucket, and deploy into clusters (`roles/container.developer`),
+nothing more.
 
 ```bash
 cd infra/bootstrap
@@ -27,7 +28,14 @@ gcloud auth application-default login          # your own credentials, once
 terraform init -backend-config="bucket=<project_id>-tfstate"
 terraform apply
 terraform output -raw github_variables | bash  # sets the repo variables CI reads
+# The official CIFAR-10 archive, unchanged; CI checks its MD5 after copying it.
+curl -fLO https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
+gcloud storage cp cifar-10-python.tar.gz gs://<project_id>-data/
 ```
+
+CI bakes CIFAR-10 into the image, and its canonical host can be slow (about
+100 KB/s, a 25-minute download), so CI copies it from the private data bucket
+instead and caches it between runs.
 
 In a brand-new project the bucket doesn't exist yet, so the very first apply
 runs with local state: comment out the `backend "gcs"` block in `versions.tf`,
