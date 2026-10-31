@@ -3,6 +3,6 @@ name: kubesplit
 description: Split learning on Kubernetes - one gRPC server, N training clients
 type: application
 # Chart version: bump when the templates change.
-version: 0.1.0
+version: 0.2.0
 # App version: the image tag used when image.tag is empty.
 appVersion: "0.1.0"

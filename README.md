@@ -1,5 +1,8 @@
 # KubeSplit
 
+[![CI](https://github.com/zihadbappy/kubesplit/actions/workflows/ci.yml/badge.svg)](https://github.com/zihadbappy/kubesplit/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Kubernetes-native split learning. A gRPC server holds the top of a CNN;
 N client pods hold the bottom and train on their own CIFAR-10 shard. Two modes:
 
