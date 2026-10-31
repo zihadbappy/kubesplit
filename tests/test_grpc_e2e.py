@@ -7,7 +7,7 @@ import time
 import grpc
 import pytest
 
-from kubesplit import checkpoint
+from kubesplit import checkpoint, client
 from kubesplit import kubesplit_pb2 as pb
 from kubesplit import kubesplit_pb2_grpc as pb_grpc
 from kubesplit.client import run_client
@@ -163,8 +163,15 @@ def test_server_that_stays_up_tells_a_restarted_client_it_is_done(start_server):
 
 
 @pytest.mark.parametrize("mode", ["vanilla", "decoupled"])
-def test_clients_join_a_restarted_server_and_finish_its_run(start_server, mode):
+def test_clients_join_a_restarted_server_and_finish_its_run(start_server, mode, monkeypatch):
     # A deleted server pod comes back at the same address as a new server: a new run.
+    loads = []
+    real_load = client.load_dataset
+    monkeypatch.setattr(
+        client, "load_dataset", lambda *a, **k: loads.append(1) or real_load(*a, **k)
+    )
+    client._training_set.cache_clear()
+
     first, old, _ = start_server(mode, clients=2, rounds=50)
     result = {}
     clients = threading.Thread(target=lambda: result.update(run_clients(old.port, [0, 1])))
@@ -173,6 +180,7 @@ def test_clients_join_a_restarted_server_and_finish_its_run(start_server, mode):
     while first.coord.round < 3 and time.monotonic() < deadline:
         time.sleep(0.05)
     assert first.coord.round >= 3, "first run never got going"
+    loads_before_restart = len(loads)  # 1, or 2 if both threads raced the first load
     old.stop()  # what SIGTERM does
 
     second, _, loop = start_server(mode, clients=2, rounds=2, port=old.port)
@@ -183,6 +191,7 @@ def test_clients_join_a_restarted_server_and_finish_its_run(start_server, mode):
     assert second.coord.done
     assert [r["reporting"] for r in second.rows] == [2, 2]  # both clients came back
     assert all(n >= 2 + 2 for n in result.values())  # rounds in the old run + the new one
+    assert len(loads) == loads_before_restart, "rejoining reloaded the training set"
 
 
 @pytest.mark.parametrize("mode", ["vanilla", "decoupled"])

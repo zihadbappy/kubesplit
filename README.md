@@ -207,7 +207,8 @@ load with `torch.load(weights_only=True)`: tensors and plain values, no pickle.
 Each server process has a random `server_id`, which Join and WaitRound
 return. When a client sees a different ID, or the server drops a call
 (`UNAVAILABLE`), it joins again in-process instead of crashing, so Kubernetes never
-restarts it. While the server is down, clients retry the connection at least every
+restarts it, and it keeps the training set it already loaded: only its shard is
+re-cut for the new run's settings. While the server is down, clients retry the connection at least every
 2 s (gRPC's default backoff grows past the ~10 s a new server pod needs), and the
 server's readiness probe runs every second, so its Service takes traffic as soon
 as it listens. Both roles exit on SIGTERM within about a second.

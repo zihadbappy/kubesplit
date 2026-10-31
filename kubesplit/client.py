@@ -9,6 +9,7 @@ client joins its new run instead of exiting.
 """
 
 import argparse
+import functools
 import itertools
 import logging
 import socket
@@ -119,6 +120,14 @@ class ServerRestarted(Exception):
 SERVER_LOST = (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.CANCELLED)
 
 
+@functools.lru_cache(maxsize=1)
+def _training_set(data_root: str, fake: bool):
+    """The whole training split, loaded once per process and reused on rejoin.
+    Reloading CIFAR-10 took ~1 s, and held a second 146 MiB copy while the old
+    session was still alive. Only the shard split (cheap) depends on the run."""
+    return load_dataset(data_root, fake=fake, train=True)
+
+
 def _join(stub, server, client_id, shard, data_root, device, connect_timeout) -> _Session:
     join = pb.JoinRequest(client_id=client_id, shard=shard)
     reply = stub.Join(join, wait_for_ready=True, timeout=connect_timeout)
@@ -132,7 +141,7 @@ def _join(stub, server, client_id, shard, data_root, device, connect_timeout) ->
         cfg.mode,
         reply.server_id,
     )
-    train = load_dataset(data_root, fake=cfg.dataset == "fake", train=True)
+    train = _training_set(data_root, cfg.dataset == "fake")
     data = client_shards(train, cfg.num_clients, cfg.partition, cfg.alpha, cfg.seed)[shard]
     g = torch.Generator().manual_seed(cfg.seed * 1000 + shard)
     loader = DataLoader(data, batch_size=cfg.batch_size, shuffle=True, generator=g)
