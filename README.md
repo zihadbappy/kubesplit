@@ -291,3 +291,7 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 Each sample crosses the cut as 64×8×8 float32 (16 KiB). Vanilla also returns
 a gradient of the same size, so it moves about 2× the bytes of decoupled mode.
 The interesting number is wall-clock time under network latency.
+
+## License
+
+MIT; see [LICENSE](LICENSE).

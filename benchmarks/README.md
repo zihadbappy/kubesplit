@@ -8,7 +8,7 @@ the raw data next to it, and the charts in the main [README](../README.md#result
 | | |
 |---|---|
 | Cluster | GKE 1.36.4, zonal (us-central1-a), 3 × `n2-standard-4` Spot VMs, from [infra/cluster](../infra/cluster) |
-| Image | `de8ddc2` (training runs, first pod-kill set), `af265b8` (faster-rejoin pod kills): CPU-only torch 2.11, CIFAR-10 baked in |
+| Image | `b2702f2` (training runs, first pod-kill set), `44f0a32` (faster-rejoin pod kills): CPU-only torch 2.11, CIFAR-10 baked in |
 | Pods | server 2 CPU / 2 GiB, 4 clients 1 CPU / 1.5 GiB each, requests = limits (Guaranteed QoS) |
 | Data | CIFAR-10, IID shards of 12,500 training images per client, test on all 10,000 |
 | Training | batch 64, SGD lr 0.05 with momentum 0.9, 5 rounds of one local epoch, FedAvg after each |
