@@ -125,3 +125,17 @@ def test_stop_releases_a_blocked_wait():
     t.join(timeout=5)
     assert not t.is_alive()
     assert result == [(0, False, None)]  # "poll again", not "training is done"
+
+
+def test_start_round_resumes_mid_run():
+    c = RoundCoordinator(st(0.0), expected_clients=1, total_rounds=5, start_round=3)
+    assert (c.round, c.done) == (3, False)
+    assert c.wait(0, timeout=0)[:2] == (3, False)
+    assert not c.submit("a", 2, st(1.0), 1)  # an update for a round before the resume is late
+
+
+def test_resuming_after_the_last_round_is_done():
+    c = RoundCoordinator(st(0.0), expected_clients=1, total_rounds=5, start_round=6)
+    assert c.done and c.round == 5
+    with pytest.raises(ValueError):
+        RoundCoordinator(st(0.0), expected_clients=1, total_rounds=5, start_round=0)

@@ -6,6 +6,7 @@ Every option also reads from a KS_* environment variable (see --help).
 """
 
 import argparse
+import copy
 import csv
 import logging
 import os
@@ -19,6 +20,7 @@ import grpc
 import torch
 from torch.utils.data import DataLoader, Dataset
 
+from kubesplit import checkpoint
 from kubesplit import kubesplit_pb2 as pb
 from kubesplit import kubesplit_pb2_grpc as pb_grpc
 from kubesplit.data import load_dataset
@@ -63,7 +65,13 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         results_path: str | None = None,
         poll_seconds: float = LONG_POLL_SECONDS,
         device: str = "cpu",
+        checkpoint_path: str | None = None,
+        run_key: str = "",
+        run_id: str = "",
+        resume: dict | None = None,
     ):
+        """With checkpoint_path, save a checkpoint after every round. With resume
+        (a checkpoint already checked to be from this run), continue from it."""
         self.cfg = cfg
         self.server_id = uuid.uuid4().hex[:12]  # new on every start: a restart is a new run
         self.poll_seconds = poll_seconds
@@ -76,6 +84,13 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         self.worker = ServerWorker(cfg.lr, device)
         self.test_loader = DataLoader(test_set, batch_size=256)
         self._keys = set(self.global_model.state_dict())
+        self.checkpoint_path, self.run_key, self.run_id = checkpoint_path, run_key, run_id
+        self.resumed_from = 0
+        if resume is not None:
+            self.global_model.load_state_dict(resume["global_state"])
+            self.worker.top.load_state_dict(resume["top"])
+            self.worker.opt.load_state_dict(resume["opt"])
+            self.resumed_from = resume["round"]
 
         self._top_lock = threading.Lock()  # one batch at a time through the top model
         self._lock = threading.Lock()  # everything below
@@ -94,6 +109,7 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
             quorum_pct=quorum_pct,
             round_timeout=round_timeout,
             on_close=self._on_round_closed,
+            start_round=self.resumed_from + 1,
         )
 
         self.metrics = m = ServerMetrics()
@@ -101,6 +117,7 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
         m.round.set_function(lambda: self.coord.round)
         m.training_done.set_function(lambda: float(self.coord.done))
         m.clients_joined.set_function(lambda: len(self.clients))
+        m.resumed_from_round.set(self.resumed_from)
 
     # -- RPCs --------------------------------------------------------------
     def Join(self, request, context):
@@ -231,7 +248,8 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
             "elapsed_seconds": round(time.monotonic() - self._started, 3),
         }
         self.rows.append(row)
-        self._append_csv(row)
+        self._append_csv(row)  # before the checkpoint: a kill between them duplicates a row
+        self._save_checkpoint(info.round, state)  # rather than losing one
         m = self.metrics
         m.round_duration.observe(info.seconds)
         m.rounds.labels(info.reason).inc()
@@ -249,6 +267,23 @@ class SplitLearningServicer(pb_grpc.SplitLearningServicer):
             t.bytes_up / 2**20,
             t.bytes_down / 2**20,
             info.seconds,
+        )
+
+    def _save_checkpoint(self, rnd: int, state: State) -> None:
+        """Everything a replacement server needs to open round rnd + 1."""
+        if not self.checkpoint_path:
+            return
+        with self._top_lock:  # with a partial quorum, stragglers may still train the top
+            top = {k: v.detach().clone() for k, v in self.worker.top.state_dict().items()}
+            opt = copy.deepcopy(self.worker.opt.state_dict())
+        checkpoint.save(
+            self.checkpoint_path,
+            fingerprint=self.run_key,
+            run_id=self.run_id,
+            round=rnd,
+            global_state=state,
+            top=top,
+            opt=opt,
         )
 
     def _append_csv(self, row: dict) -> None:
@@ -323,6 +358,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--metrics-port", type=int, default=env("METRICS_PORT", "8000"), help="0 = off")
     p.add_argument("--results-dir", default=env("RESULTS_DIR", "results"))
     p.add_argument("--run-id", default=env("RUN_ID", ""))
+    p.add_argument(
+        "--checkpoint-dir",
+        default=env("CHECKPOINT_DIR", ""),
+        help="save a checkpoint here after every round and resume from it; empty = off",
+    )
     p.add_argument("--done-grace", type=float, default=env("DONE_GRACE", "30"))
     p.add_argument(
         "--exit-on-done",
@@ -348,7 +388,18 @@ def main(argv=None) -> int:
         dataset=a.dataset,
         max_batches=a.max_batches,
     )
-    run_id = a.run_id or f"{a.mode}-c{a.clients}-{time.strftime('%Y%m%d-%H%M%S')}"
+    key = checkpoint.fingerprint(cfg, a.rounds, a.run_id)
+    ckpt_path = None
+    if a.checkpoint_dir:
+        os.makedirs(a.checkpoint_dir, exist_ok=True)
+        ckpt_path = os.path.join(a.checkpoint_dir, "checkpoint.pt")
+    resume = checkpoint.load(ckpt_path)
+    if resume is not None and resume["fingerprint"] != key:
+        log.info("ignoring the checkpoint in %s: it is from other run settings", a.checkpoint_dir)
+        resume = None
+    # A resumed run keeps its ID, so it goes on appending to the same results file.
+    run_id = (resume or {}).get("run_id") or a.run_id
+    run_id = run_id or f"{a.mode}-c{a.clients}-{time.strftime('%Y%m%d-%H%M%S')}"
     os.makedirs(a.results_dir, exist_ok=True)
     results_path = os.path.join(a.results_dir, f"{run_id}.csv")
 
@@ -360,7 +411,13 @@ def main(argv=None) -> int:
         round_timeout=a.round_timeout,
         results_path=results_path,
         device=device(),
+        checkpoint_path=ckpt_path,
+        run_key=key,
+        run_id=run_id,
+        resume=resume,
     )
+    if resume is not None:
+        log.info("resuming run %s after round %d from %s", run_id, resume["round"], ckpt_path)
     log.info(
         "run %s (server id %s): %s, %d clients, %d rounds, quorum %d",
         run_id,

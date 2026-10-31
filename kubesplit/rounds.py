@@ -41,9 +41,12 @@ class RoundCoordinator:
         round_timeout: float = 600.0,
         on_close: Callable[[RoundClosed, State], None] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        start_round: int = 1,  # > 1 when resuming from a checkpoint
     ):
         if not 0 < quorum_pct <= 100:
             raise ValueError("quorum_pct must be in (0, 100]")
+        if start_round < 1:
+            raise ValueError("start_round must be at least 1")
         self.quorum = max(1, math.ceil(expected_clients * quorum_pct / 100))
         self.total_rounds = total_rounds
         self.round_timeout = round_timeout
@@ -52,8 +55,8 @@ class RoundCoordinator:
         self._cv = threading.Condition()
         self._updates: dict[str, tuple[State, int]] = {}
         self.global_state = initial_state
-        self.round = 1
-        self.done = False
+        self.round = min(start_round, total_rounds)
+        self.done = start_round > total_rounds  # resumed after the last round closed
         self._stopped = False
         self._opened = clock()
 

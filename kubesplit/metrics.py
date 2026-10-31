@@ -64,6 +64,11 @@ class ServerMetrics(_Metrics):
             "Client updates discarded because their round had already closed",
             registry=r,
         )
+        self.resumed_from_round = Gauge(
+            "kubesplit_resumed_from_round",
+            "Last closed round restored from a checkpoint at start; 0 = a fresh run",
+            registry=r,
+        )
         # Model quality
         self.test_accuracy = Gauge(
             "kubesplit_test_accuracy_ratio",

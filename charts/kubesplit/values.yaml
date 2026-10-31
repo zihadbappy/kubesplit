@@ -35,6 +35,13 @@ server:
     limits:
       cpu: "2"
       memory: 2Gi
+  # A small disk for results and a checkpoint after every round, so a replaced
+  # server pod resumes the run instead of starting over. It lives as long as the
+  # release: a fresh install starts a fresh run. Off = both die with the pod.
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""   # empty = the cluster's default (kind: standard, GKE: standard-rwo)
   nodeSelector: {}
   tolerations: []
 

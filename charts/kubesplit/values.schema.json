@@ -37,7 +37,15 @@
       "type": "object",
       "properties": {
         "port": {"type": "integer", "minimum": 1, "maximum": 65535},
-        "metricsPort": {"type": "integer", "minimum": 1, "maximum": 65535}
+        "metricsPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "size": {"type": "string", "pattern": "^[0-9]+(Mi|Gi|Ti)$"},
+            "storageClass": {"type": "string"}
+          }
+        }
       }
     },
     "serviceMonitor": {

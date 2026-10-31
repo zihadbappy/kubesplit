@@ -67,6 +67,11 @@ spec:
             # An exited container gets restarted, which would start a new run.
             - name: KS_EXIT_ON_DONE
               value: "false"
+            {{- if .Values.server.persistence.enabled }}
+            # Saved after every round; a replacement pod with the same run settings resumes.
+            - name: KS_CHECKPOINT_DIR
+              value: /results/checkpoints
+            {{- end }}
           ports:
             - name: grpc
               containerPort: {{ .Values.server.port }}
@@ -91,7 +96,12 @@ spec:
               mountPath: /tmp
       volumes:
         - name: results
+          {{- if .Values.server.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "kubesplit.serverName" . }}
+          {{- else }}
           emptyDir: {}
+          {{- end }}
         - name: tmp
           emptyDir: {}
       {{- with .Values.server.nodeSelector }}

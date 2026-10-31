@@ -38,7 +38,10 @@ CIFAR-10 for 5 epochs, 3 runs per configuration. Method and raw data are in
   on schedule (38.6 s after the kill, about one normal round). A killed server is
   replaced and all clients rejoin its new run in 12.3 s, down from 25.4 s after
   capping gRPC's reconnect backoff and probing readiness every second; training
-  moves again after 48.7 s (was 61.3 s).
+  moves again after 48.7 s (was 61.3 s). Those runs started over from round 1.
+  The server now checkpoints after every round, and on kind a killed server
+  resumes where it stopped, losing 0 rounds (back to training in 14–16 s); not
+  yet measured on GKE.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/round-time-vs-latency-dark.png">
@@ -192,8 +195,13 @@ shard defaults to the hostname's trailing ordinal (`kubesplit-client-3` → 3).
 Late updates for a closed round are discarded; the straggler joins the next round.
 
 **When pods die.** A replacement client pod rejoins and trains the current round.
-The server keeps no state on disk, so a replacement server starts a new run from
-round 1. Each server process has a random `server_id`, which Join and WaitRound
+After every round the server writes a checkpoint (the averaged client model, its
+own model and optimizer, the round number) to a PersistentVolumeClaim, writing a
+temp file and renaming it so a kill mid-write can't corrupt it. A replacement
+server with the same run settings loads it and opens the next round; with other
+settings, or a fresh `helm install` (new volume), it starts a new run. Checkpoints
+load with `torch.load(weights_only=True)`: tensors and plain values, no pickle.
+Each server process has a random `server_id`, which Join and WaitRound
 return. When a client sees a different ID, or the server drops a call
 (`UNAVAILABLE`), it joins again in-process instead of crashing, so Kubernetes never
 restarts it. While the server is down, clients retry the connection at least every
@@ -207,7 +215,8 @@ Tensors travel as dtype + shape + raw bytes (`kubesplit/tensors.py`), never pick
 Every flag also reads a `KS_*` environment variable: `KS_MODE`, `KS_CLIENTS`,
 `KS_ROUNDS`, `KS_QUORUM_PCT`, `KS_ROUND_TIMEOUT`, `KS_PARTITION`, `KS_ALPHA`,
 `KS_DATASET` (`cifar10`/`fake`), `KS_MAX_BATCHES`, `KS_SERVER`, `KS_SHARD`, `KS_THREADS`,
-`KS_METRICS_PORT` (default 8000; 0 turns metrics off).
+`KS_METRICS_PORT` (default 8000; 0 turns metrics off), `KS_CHECKPOINT_DIR` (server: save
+and resume checkpoints there; the chart sets it when `server.persistence.enabled`).
 Torch sizes its thread pool from the container's cgroup CPU quota, not the host core count.
 
 On Kubernetes, `run.netDelayMs` adds network latency between clients and server. Each
@@ -238,6 +247,7 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `kubesplit_rounds_total{reason}` | counter | Do rounds close by quorum or by timeout? |
 | `kubesplit_round_clients_reporting` | gauge | How many clients made the last round? |
 | `kubesplit_late_updates_total` | counter | How often is a straggler's work thrown away? |
+| `kubesplit_resumed_from_round` | gauge | Did this server resume from a checkpoint, and after which round? (0 = fresh run) |
 | `kubesplit_client_joins_total`, `kubesplit_clients_joined` | counter, gauge | Did a killed client come back? |
 | `kubesplit_test_accuracy_ratio`, `kubesplit_train_loss` | gauge | Is the model learning? |
 | `kubesplit_transferred_bytes_total{kind}` | counter | Bytes of activations, gradients, weights |
@@ -262,6 +272,7 @@ Every process serves Prometheus metrics at `:8000/metrics` (`kubesplit/metrics.p
 | `kubesplit/data.py` | CIFAR-10 loading, deterministic IID and Dirichlet(α) sharding |
 | `kubesplit/split.py` | `ClientWorker` / `ServerWorker` (independent of transport), `fedavg` |
 | `kubesplit/rounds.py` | `RoundCoordinator`: quorum, timeout, FedAvg, late-update rejection |
+| `kubesplit/checkpoint.py` | Server checkpoints: run fingerprint, atomic save, safe load |
 | `kubesplit/server.py`, `client.py` | gRPC services |
 | `kubesplit/tensors.py` | Tensor ↔ protobuf without pickle |
 | `kubesplit/baseline.py` | Single-process reference run of both modes |

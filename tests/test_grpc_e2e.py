@@ -7,6 +7,7 @@ import time
 import grpc
 import pytest
 
+from kubesplit import checkpoint
 from kubesplit import kubesplit_pb2 as pb
 from kubesplit import kubesplit_pb2_grpc as pb_grpc
 from kubesplit.client import run_client
@@ -29,6 +30,7 @@ def start_server():
         results_path=None,
         exit_on_done=True,
         port=0,
+        **servicer_kwargs,  # checkpoint_path, resume, ...
     ):
         cfg = pb.RunConfig(
             mode=mode,
@@ -49,6 +51,7 @@ def start_server():
             round_timeout=round_timeout,
             results_path=results_path,
             poll_seconds=1.0,
+            **servicer_kwargs,
         )
         server = Server(servicer, port=port).start()
         loop = server.run_until_done if exit_on_done else server.wait_until_done
@@ -180,6 +183,36 @@ def test_clients_join_a_restarted_server_and_finish_its_run(start_server, mode):
     assert second.coord.done
     assert [r["reporting"] for r in second.rows] == [2, 2]  # both clients came back
     assert all(n >= 2 + 2 for n in result.values())  # rounds in the old run + the new one
+
+
+@pytest.mark.parametrize("mode", ["vanilla", "decoupled"])
+def test_a_replacement_server_resumes_from_the_checkpoint(start_server, tmp_path, mode):
+    # With checkpoints, a replaced server carries the run on instead of starting over.
+    results, ckpt = str(tmp_path / "run.csv"), str(tmp_path / "checkpoint.pt")
+    run = {"rounds": 4, "results_path": results, "checkpoint_path": ckpt,
+           "run_key": "k", "run_id": "r"}  # fmt: skip
+    first, old, _ = start_server(mode, clients=2, **run)
+    result = {}
+    clients = threading.Thread(target=lambda: result.update(run_clients(old.port, [0, 1])))
+    clients.start()
+    deadline = time.monotonic() + 60
+    while first.coord.round < 3 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    old.stop()  # waits for open RPCs, so no round can close after this
+    saved = checkpoint.load(ckpt)
+    assert saved["round"] >= 2
+
+    second, _, loop = start_server(mode, clients=2, port=old.port, resume=saved, **run)
+    assert second.resumed_from == saved["round"]
+    clients.join(timeout=120)
+    assert not clients.is_alive()
+    loop.join(timeout=30)
+    assert second.coord.done
+    rounds = [int(r["round"]) for r in csv.DictReader(open(results))]
+    assert rounds == [1, 2, 3, 4]  # nothing lost, nothing repeated
+    # Each client trained every round; the one in progress at the stop may be redone,
+    # since the checkpoint is from the last round that closed.
+    assert all(4 <= n <= 5 for n in result.values())
 
 
 def test_wait_round_answers_a_client_that_never_joined_at_once(start_server):

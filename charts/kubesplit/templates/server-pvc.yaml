@@ -1,0 +1,20 @@
+{{- if .Values.server.persistence.enabled }}
+# The server's results and checkpoint. Created and deleted with the release, so
+# a new install starts a new run, while a pod replaced within it resumes.
+# ReadWriteOnce: one node at a time, fine for the single server pod.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kubesplit.serverName" . }}
+  labels:
+    {{- include "kubesplit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.server.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.server.persistence.size }}
+{{- end }}

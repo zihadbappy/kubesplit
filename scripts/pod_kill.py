@@ -142,6 +142,7 @@ def main() -> int:
     kube.run("delete", "pod", victim["name"], "--wait=false")
 
     stages: dict[str, float] = {}
+    resumed_from = 0  # the replacement server's kubesplit_resumed_from_round
 
     def mark(stage: str) -> None:
         if stage not in stages:
@@ -164,6 +165,7 @@ def main() -> int:
             # A new server process: new start time, counters back at zero.
             if m["process_start_time_seconds"] != before["process_start_time_seconds"]:
                 mark("server_up")
+                resumed_from = int(m.get("kubesplit_resumed_from_round", 0))
                 if m["kubesplit_clients_joined"] >= clients:
                     mark("rejoined")
                 if m["kubesplit_rounds_total"] >= 1 and "rejoined" in stages:
@@ -177,12 +179,18 @@ def main() -> int:
         time.sleep(POLL)
 
     recovered = "round_closed" in stages
-    lost = int(before["kubesplit_rounds_total"]) if is_server else 0
+    # Rounds closed when the server died, minus those a checkpoint brought back.
+    lost = max(0, int(before["kubesplit_round"]) - 1 - resumed_from) if is_server else 0
+    if not is_server:
+        outcome = ""
+    elif resumed_from:
+        outcome = f"; the new server resumed after round {resumed_from}, losing {lost} rounds"
+    else:
+        outcome = f"; the new run restarted from round 1, losing {lost} rounds"
     print(
         f"{'recovered' if recovered else 'NOT recovered'}: training moving again "
         f"{stages.get('round_closed', float('nan')):.1f}s after the kill "
-        f"(a normal round took {round_s:.1f}s)"
-        + (f"; the new run restarted from round 1, losing {lost} rounds" if is_server else "")
+        f"(a normal round took {round_s:.1f}s){outcome}"
     )
 
     if a.out:
