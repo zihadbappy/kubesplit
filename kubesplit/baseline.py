@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass
 import torch
 from torch.utils.data import DataLoader
 
-from kubesplit.data import client_shards, load_cifar10
+from kubesplit.data import client_shards, load_cifar10, train_loader
 from kubesplit.split import ClientWorker, Mode, ServerWorker, evaluate, fedavg
 
 
@@ -53,7 +53,7 @@ def run(
     train, test = load_cifar10(data_root, fake=fake_data)
     shards = client_shards(train, clients, partition, alpha, seed)
     g = torch.Generator().manual_seed(seed)
-    loaders = [DataLoader(s, batch_size=batch_size, shuffle=True, generator=g) for s in shards]
+    loaders = [train_loader(s, batch_size, g) for s in shards]
     test_loader = DataLoader(test, batch_size=256)
 
     workers = [ClientWorker(mode, lr, device) for _ in range(clients)]

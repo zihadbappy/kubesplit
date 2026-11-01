@@ -9,7 +9,7 @@ from typing import Literal
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset, Subset, TensorDataset
+from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset
 
 from kubesplit.model import NUM_CLASSES
 
@@ -119,3 +119,16 @@ def client_shards(
 ) -> list[Subset]:
     parts = partition(dataset_labels(train), num_clients, kind, alpha, seed)
     return [Subset(train, p.tolist()) for p in parts]
+
+
+def train_loader(shard: Dataset, batch_size: int, generator: torch.Generator) -> DataLoader:
+    """Shuffled batches of one client's shard. BatchNorm cannot train on a batch
+    of one, so when a single sample is left over it is dropped from the epoch
+    (a different one each time, since the order is reshuffled)."""
+    return DataLoader(
+        shard,
+        batch_size=batch_size,
+        shuffle=True,
+        generator=generator,
+        drop_last=len(shard) % batch_size == 1,
+    )

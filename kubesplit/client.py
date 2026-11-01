@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 
 from kubesplit import kubesplit_pb2 as pb
 from kubesplit import kubesplit_pb2_grpc as pb_grpc
-from kubesplit.data import client_shards, load_dataset
+from kubesplit.data import client_shards, load_dataset, train_loader
 from kubesplit.metrics import ClientMetrics
 from kubesplit.runtime import (
     CLIENT_GRPC_OPTIONS,
@@ -144,7 +144,7 @@ def _join(stub, server, client_id, shard, data_root, device, connect_timeout) ->
     train = _training_set(data_root, cfg.dataset == "fake")
     data = client_shards(train, cfg.num_clients, cfg.partition, cfg.alpha, cfg.seed)[shard]
     g = torch.Generator().manual_seed(cfg.seed * 1000 + shard)
-    loader = DataLoader(data, batch_size=cfg.batch_size, shuffle=True, generator=g)
+    loader = train_loader(data, cfg.batch_size, g)
     return _Session(reply.server_id, cfg, loader, ClientWorker(cfg.mode, cfg.lr, device))
 
 
