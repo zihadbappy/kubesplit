@@ -5,8 +5,8 @@
 
 Writes, for each chart, a light and a dark PNG (<name>-light.png, <name>-dark.png)
 for the README's <picture> tags, and <bench>/results.md: Markdown tables with
-the mean and range over repeats per (mode, delay), plus recovery times from
-any pod-kill*.csv. Only clean runs count (no restarts, one join per client).
+the mean and range over repeats per (mode, delay), plus recovery times and
+rounds lost from any pod-kill*.csv. Only clean runs count (no restarts, one join per client).
 """
 
 import argparse
@@ -195,8 +195,8 @@ def pod_kill_tables(bench: Path) -> str:
     out = []
     for path in sorted(bench.glob("pod-kill*.csv")):
         rows = list(csv.DictReader(path.open()))
-        out += [f"`{path.name}`", "", "| killed | n | " + " | ".join(stages) + " |",
-                "|" + "---|" * (len(stages) + 2)]  # fmt: skip
+        out += [f"`{path.name}`", "", "| killed | n | " + " | ".join(stages) + " | rounds lost |",
+                "|" + "---|" * (len(stages) + 3)]  # fmt: skip
         for kind in ("client", "server"):
             rs = [r for r in rows if r["target"].startswith(kind)]
             if not rs:
@@ -207,6 +207,9 @@ def pod_kill_tables(bench: Path) -> str:
                 cells.append(
                     f"{statistics.mean(xs):.1f} ({min(xs):.1f}–{max(xs):.1f})" if xs else "–"
                 )
+            # Closed rounds the run lost: a server without a checkpoint starts over.
+            lost = [int(r["rounds_lost"]) for r in rs]
+            cells.append(f"{statistics.mean(lost):.1f} ({min(lost)}–{max(lost)})")
             out.append(f"| {kind} | {len(rs)} | " + " | ".join(cells) + " |")
         out.append("")
     return "\n".join(out)

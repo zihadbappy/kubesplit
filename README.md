@@ -41,10 +41,12 @@ CIFAR-10 for 5 epochs, 3 runs per configuration. Method and raw data are in
   on schedule (38.6 s after the kill, about one normal round). A killed server is
   replaced and all clients rejoin its new run in 12.3 s, down from 25.4 s after
   capping gRPC's reconnect backoff and probing readiness every second; training
-  moves again after 48.7 s (was 61.3 s). Those runs started over from round 1.
-  The server now checkpoints after every round, and on kind a killed server
-  resumes where it stopped, losing 0 rounds (back to training in 14–16 s); not
-  yet measured on GKE.
+  moves again after 48.7 s (was 61.3 s). Those runs started over from round 1,
+  losing 3 rounds. The server now checkpoints after every round: in 3 kills on
+  GKE it resumed after the last closed round, losing 0. Each replacement landed
+  on another node, so its disk had to detach and reattach (14–18 s), and
+  training moves again after 65.6 s instead of 48.7 s, with nothing to redo
+  where a restart had ~110 s of rounds to train again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/round-time-vs-latency-dark.png">

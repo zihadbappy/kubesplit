@@ -15,15 +15,21 @@
 
 ## Pod kills (seconds after the delete)
 
+`pod-kill-checkpoint.csv`
+
+| killed | n | pod_running | server_up | rejoined | round_closed | rounds lost |
+|---|---|---|---|---|---|---|
+| server | 3 | 18.3 (17.1–20.4) | 22.3 (21.2–24.5) | 29.1 (22.6–32.4) | 65.6 (58.4–70.6) | 0.0 (0–0) |
+
 `pod-kill-faster-rejoin.csv`
 
-| killed | n | pod_running | server_up | rejoined | round_closed |
-|---|---|---|---|---|---|
-| server | 3 | 1.9 (1.7–2.2) | 6.3 (5.0–7.3) | 12.3 (11.7–13.0) | 48.7 (48.7–48.8) |
+| killed | n | pod_running | server_up | rejoined | round_closed | rounds lost |
+|---|---|---|---|---|---|---|
+| server | 3 | 1.9 (1.7–2.2) | 6.3 (5.0–7.3) | 12.3 (11.7–13.0) | 48.7 (48.7–48.8) | 3.0 (3–3) |
 
 `pod-kill.csv`
 
-| killed | n | pod_running | server_up | rejoined | round_closed |
-|---|---|---|---|---|---|
-| client | 3 | 6.3 (4.9–8.2) | – | 6.4 (6.2–6.7) | 38.6 (36.7–41.1) |
-| server | 3 | 2.8 (1.6–4.7) | 8.4 (8.0–9.0) | 25.4 (24.1–26.6) | 61.3 (60.8–62.2) |
+| killed | n | pod_running | server_up | rejoined | round_closed | rounds lost |
+|---|---|---|---|---|---|---|
+| client | 3 | 6.3 (4.9–8.2) | – | 6.4 (6.2–6.7) | 38.6 (36.7–41.1) | 0.0 (0–0) |
+| server | 3 | 2.8 (1.6–4.7) | 8.4 (8.0–9.0) | 25.4 (24.1–26.6) | 61.3 (60.8–62.2) | 5.7 (3–11) |

@@ -1,6 +1,6 @@
 # Benchmarks
 
-Measured on GKE on 2026-10-30. The numbers are in [gke/results.md](gke/results.md),
+Measured on GKE on 2026-10-30, plus the checkpoint pod kills on 2026-11-01. The numbers are in [gke/results.md](gke/results.md),
 the raw data next to it, and the charts in the main [README](../README.md#results).
 
 ## Setup
@@ -8,7 +8,7 @@ the raw data next to it, and the charts in the main [README](../README.md#result
 | | |
 |---|---|
 | Cluster | GKE 1.36.4, zonal (us-central1-a), 3 × `n2-standard-4` Spot VMs, from [infra/cluster](../infra/cluster) |
-| Image | `b2702f2` (training runs, first pod-kill set), `44f0a32` (faster-rejoin pod kills): CPU-only torch 2.11, CIFAR-10 baked in |
+| Image | `b2702f2` (training runs, first pod-kill set), `44f0a32` (faster-rejoin pod kills), `59fc13f` (checkpoint pod kills, 2026-11-01, us-central1-f: a and c had no capacity): CPU-only torch 2.11, CIFAR-10 baked in |
 | Pods | server 2 CPU / 2 GiB, 4 clients 1 CPU / 1.5 GiB each, requests = limits (Guaranteed QoS) |
 | Data | CIFAR-10, IID shards of 12,500 training images per client, test on all 10,000 |
 | Training | batch 64, SGD lr 0.05 with momentum 0.9, 5 rounds of one local epoch, FedAvg after each |
@@ -33,7 +33,9 @@ no pod restarted and every client joined once.
 - Ranges are the minimum and maximum over the 3 runs.
 
 [`scripts/pod_kill.py`](../scripts/pod_kill.py) deletes a pod 5 s into a round
-on a 40-round decoupled run and times each stage of recovery.
+on a 40-round decoupled run and times each stage of recovery. The checkpoint set
+kills the server 3 times in one run, in rounds 4, 8 and 12; it resumes each time,
+so the run carries on instead of starting over.
 
 ## Reproduce
 
@@ -48,4 +50,4 @@ cd infra/cluster && terraform destroy
 ```
 
 The 24 runs, 6 pod kills and 3 more after the rejoin change took about
-2.6 hours of cluster time.
+2.6 hours of cluster time; the 3 checkpoint kills about 30 minutes more.
